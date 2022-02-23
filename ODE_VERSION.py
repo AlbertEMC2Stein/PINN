@@ -19,7 +19,7 @@ class Net(nn.Module):
         self.oL = nn.Linear(n, 1)
 
     def forward(self, x):
-        activation = lambda x: x  # torch.tanh
+        activation = torch.tanh
         y = activation(self.inL(x))
         y = activation(self.h1L(y))
         y = activation(self.h2L(y))
