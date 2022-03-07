@@ -7,24 +7,24 @@ import matplotlib.pyplot as plt
 matplotlib.use('macosx')
 
 
+def smooth_LeakyReLU(x, a=0.02, b=15):
+    return (1 + a) / 2 * x + (1 - a) / (2 * b) * torch.sqrt((b * x).pow(2) + 1)
+
+
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        n = 128
+        n = 512
         self.inL = nn.Linear(2, n)
         self.h1L = nn.Linear(n, n)
-        self.h2L = nn.Linear(n, n)
-        self.h3L = nn.Linear(n, n)
         self.oL = nn.Linear(n, 1)
 
     def forward(self, x):
-        activation = torch.tanh
+        activation = smooth_LeakyReLU
         y = activation(self.inL(x))
         y = activation(self.h1L(y))
-        y = activation(self.h2L(y))
-        y = activation(self.h3L(y))
-        y = activation(self.oL(y))
-        return y  # torch.tensor(-torch.sin(torch.pi * x[..., 1]), requires_grad=True).reshape(y.shape)
+        y = self.oL(y)
+        return y
 
 
 def diff(func, x, wrt):
@@ -91,6 +91,11 @@ def generate_training_data(xtrange, initial_f, boundary_fs, sample_sizes):
     return data
 
 
+def pick_samples(data, n):
+    idx = np.random.choice(range(len(data)), n, replace=False)
+    return data[idx]
+
+
 def plot_nn():
     xs = torch.linspace(-1, 1, 100)
     ts = torch.linspace(0, 1, 100)
@@ -115,39 +120,55 @@ def plot_loss():
 if __name__ == "__main__":
     settings = {
         "SAMPLE_SIZES": {
-            "initial": 5,
-            "boundary": 5,
-            "collocation": 100
+            "initial": 10,
+            "boundary": 10,
+            "collocation": 200
         },
-        "EPOCHS": 1000,
-        "LR": 0.01,
+        "EPOCHS": 200,
+        "LR": 0.001,
         "DEVICE": "cuda" if torch.cuda.is_available() else "cpu"
     }
 
+    dict = generate_training_data([-1, 1, 0, 1],
+                                  lambda x: -torch.sin(torch.pi * x),  # x.pow(2) * torch.cos(torch.pi * x)
+                                  [lambda tx: torch.zeros(tx.shape[0])],
+                                  settings["SAMPLE_SIZES"]
+                                  )
+
     u = Net()
-    opt = torch.optim.Adam(u.parameters(), lr=settings["LR"])
-    scheduler = torch.optim.lr_scheduler.StepLR(opt, step_size=10, gamma=0.9)
+    opt = torch.optim.Rprop(u.parameters(), lr=settings["LR"])
+    scheduler = torch.optim.lr_scheduler.StepLR(opt, step_size=50, gamma=0.8)
 
     def f(x):
-        # u_t = (0.01/tf.pi)*u_xx - u*u_x
+        # uₜ = (0.01/π)uₓₓ - uuₓ
         result = neuraldiff(u, x, (1, 0)) + u(x) * neuraldiff(u, x, (0, 1)) - \
                  0.01 / torch.pi * neuraldiff(u, x, (0, 2))
 
-        # u_t = 0
-        # result = neuraldiff(u, x, (1, 0))
+        # uₜ = 0
+        result = neuraldiff(u, x, (1, 0))
+
+        # uₜ = 5(u(1 - |u|) + u³ - u)
+        # result = neuraldiff(u, x, (1, 0)) - 5 * (u(x) * (1 - abs(u(x))) + u(x).pow(3) - u(x))
+
+        # uₜ = 0.0001uₓₓ - 5u² + 5u
+        # result = neuraldiff(u, x, (1, 0)) - 0.0001 * neuraldiff(u, x, (0, 2)) - 5 * u(x).pow(3) + 5 * u(x)
 
         return result
 
     def loss(dict):
         criterion = torch.nn.MSELoss()
-        u0 = u(dict["input0"])
-        tgt0 = dict["target0"].reshape(u0.shape)
+        split = 20
 
+        u0 = u(dict["input0"])
         ub = u(dict["inputb"])
+        # ub = neuraldiff(u, dict["inputb"], (0, 1))
+
+        tgt0 = dict["target0"].reshape(u0.shape)
         tgtb = dict["targetb"].reshape(ub.shape)
+        # tgtb = torch.zeros_like(ub)
 
         fi = torch.zeros_like(dict["inputi"])
-        if epoch % 25 <= 4:
+        if epoch % 100 >= split:
             fi = f(dict["inputi"])
 
         E_u0 = criterion(u0, tgt0.reshape(u0.shape))
@@ -156,25 +177,19 @@ if __name__ == "__main__":
 
         return E_u0 + E_ub + E_fi
 
-    trainTemplate = "\r[INFO] epoch: {} train loss: {:.4f} learning rate: {:.4f}"
+    trainTemplate = "\r[INFO] epoch: {} train loss: {:.4f} learning rate: {:.8f}"
     losses = []
     for epoch in range(settings["EPOCHS"]):
         trainLoss = 0
         samples = 0
         u.train()
 
-        data = generate_training_data([-1, 1, 0, 1],
-                                      lambda x: -torch.sin(torch.pi * x),
-                                      [lambda tx: torch.zeros(tx.shape[0])],
-                                      settings["SAMPLE_SIZES"]
-                                      )
-
         data = {
-            "input0": data["initial"][0],
-            "target0": data["initial"][1],
-            "inputb": data["boundary_0"][0],
-            "targetb": data["boundary_0"][1],
-            "inputi": data["collocation"][0]
+            "input0": dict["initial"][0],
+            "target0": dict["initial"][1],
+            "inputb": dict["boundary_0"][0],
+            "targetb": dict["boundary_0"][1],
+            "inputi": pick_samples(dict["collocation"][0], 100)
         }
 
         def closure():

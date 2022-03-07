@@ -1,6 +1,6 @@
 import torch
 from torch import tensor
-from torch.autograd.functional import jacobian, hessian
+from torch.autograd.functional import jacobian
 import torch.nn as nn
 import matplotlib.pyplot as plt
 
@@ -10,15 +10,17 @@ def smooth_LeakyReLU(x, a=0.02, b=15):
 
 
 class Net(nn.Module):
-    def __init__(self):
+    def __init__(self, outs):
         super(Net, self).__init__()
-        n = 512
+        n = 256
         self.il = nn.Linear(1, n, bias=True)
-        self.ol = nn.Linear(n, 1, bias=True)
+        self.h1 = nn.Linear(n, n, bias=True)
+        self.ol = nn.Linear(n, outs, bias=True)
 
     def forward(self, x):
-        activation = smooth_LeakyReLU  # torch.nn.LeakyReLU()
+        activation = smooth_LeakyReLU
         y = activation(self.il(x))
+        y = activation(self.h1(y))
         y = self.ol(y)
         return y
 
@@ -28,11 +30,11 @@ def gen_inputs(a, b, n):
 
 
 def calc_f(xs):
-    f_out = f(xs[0])
+    f_out = [f(xs[0])]
     for x in xs[1:]:
-        f_out = torch.cat((f_out, f(x)))
+        f_out += [f(x)]
 
-    return f_out
+    return torch.stack(f_out)
 
 
 def approximate():
@@ -66,11 +68,11 @@ def approximate():
 def plot_nn():
     ts = torch.linspace(*xrange, 1001).reshape((1001, 1))
 
-    plt.plot(ts, torch.exp(-ts.pow(2)), color='r', label="Analytical solution")
-    plt.plot(ts, u(ts).detach(), label="Numerical solution")
-    plt.scatter(data["inputs"], torch.zeros(settings["SAMPLES"]), c='black', s=0.5)
-    plt.xlabel('t')
-    plt.ylabel('y')
+    #plt.plot(ts, torch.cos(ts), color='r', label="Analytical solution")
+    plt.plot(u(ts)[:, 0].detach(), u(ts)[:, 1].detach(), label="Numerical solution")
+    #plt.scatter(data["inputs"], torch.zeros(settings["SAMPLES"]), c='black', s=0.5)
+    plt.xlabel('y')
+    plt.ylabel('y\'')
     plt.legend()
     plt.show()
 
@@ -86,7 +88,7 @@ def plot_loss():
 def plot_deviation():
     ts = torch.linspace(*xrange, 1001).reshape((1001, 1))
 
-    plt.plot(ts, calc_f(ts).detach(), label="f")
+    plt.plot(ts, torch.norm(calc_f(ts), dim=-1).detach(), label="f")
     plt.xlabel('t')
     plt.ylabel('y')
     plt.legend()
@@ -95,9 +97,9 @@ def plot_deviation():
 
 if __name__ == "__main__":
     settings = {
-        "EPOCHS": 500,
-        "SAMPLES": 201,
-        "LR": 0.0001,
+        "EPOCHS": 300,
+        "SAMPLES": 25,
+        "LR": 0.001,
         "DEVICE": "cuda" if torch.cuda.is_available() else "cpu"
     }
 
@@ -105,33 +107,25 @@ if __name__ == "__main__":
     data = {
         "initial bias": 1,
         "initial": tensor([[0.]]),
-        "target": tensor([[1.]]),
+        "target": tensor([[2., 0.]]),
         "inputs": gen_inputs(*xrange, settings["SAMPLES"])
     }
 
     device = torch.device(settings["DEVICE"])
-    u = Net().to(device)
+    u = Net(2).to(device)
     opt = torch.optim.Rprop(u.parameters(), lr=settings["LR"])
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, factor=0.9, patience=5)
 
     def f(x):
-        # u'' - µ(1 - u^2)u' + u = 0, µ >> 0
-        # result = hessian(u, x) - 10 * (1 - u(x).pow(2)) * jacobian(u, x) + u(x)
+        J = torch.squeeze(jacobian(u, x))
+        U = u(x)
 
-        # u' = -u => u(x) = exp(-x)                             √ (mit u(0) = 1 und x in [0, 5])
-        # result = jacobian(u, x) + u(x)
+        # y'' = -y  ==>  (y, y')' = (y', -y)
+        result = J - torch.tensor([U[1], -U[0]])
+        # result = U - 2*torch.tensor([torch.cos(x), -torch.sin(x)])
 
-        # u' = exp(-x) - u => u(x) = xexp(-x)                   √ (mit u(0) = 0 und x in [0, 5])
-        # result = jacobian(u, x) + u(x) - torch.exp(-x)
-
-        # u' = -2xu => u(x) = exp(-x^2)                         √ (mit u(0) = 1 und x in [-2, 2])
-        result = jacobian(u, x) + 2 * x * u(x)
-
-        # u'' = -u => u(x) = cos(x)                             X
-        # result = u(x) + hessian(u, x)
-
-        # u' = 1 - u^2 => u(x) = tanh(x)                        √ (mit u(0) = 0 und x in [-2, 2])
-        # result = jacobian(u, x) + u(x).pow(2) - 1
+        # y'' - µ(1 - y^2)y' + y = 0 ==> (y, y')' = (y', µ(1 - y^2)y' - y)
+        # result = J - torch.tensor([U[1], 0 * (1 - U[0].pow(2)) * U[1] - U[0]]).reshape(J.shape)
 
         return result
 
