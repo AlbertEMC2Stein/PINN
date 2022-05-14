@@ -22,6 +22,10 @@ class Cuboid(Region):
         self.dimension = self.diff_idx.size
         self.samples = None
 
+        if self.dimension == 0:
+            self.diff_idx = np.array([0])
+            self.dimension = 1
+
     def pick(self, n, sampler):
         if self.samples is not None and sampler.isPersistent:
             tmp = self.samples
@@ -38,7 +42,7 @@ class Cuboid(Region):
             x = np.meshgrid(*lines)
             y = np.stack(list(map(np.ravel, x))).T
 
-            tmp = np.ones_like(y) * self.corner1
+            tmp = np.ones((len(y), len(self.corner1))) * self.corner1
             tmp[:, self.diff_idx] = y
 
             if self.samples is None:
@@ -84,10 +88,6 @@ class Random(Sampler):
 
     def pick(self, n):
         return np.random.uniform(size=(1,n))
-
-    @property
-    def is_persistent(self):
-        return False
 
 
 class FirstRandom(Sampler):
