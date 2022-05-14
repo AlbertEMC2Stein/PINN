@@ -1,0 +1,214 @@
+import tensorflow as tf
+import numpy as np
+import matplotlib
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+
+matplotlib.use('macosx')
+
+
+def plot_results(solver):
+    def plot_sample_points():
+        fig = plt.figure(figsize=(9, 6))
+
+        for cond in solver.bvp.conditions:
+            t, x = cond.sample_points()[:, 0], cond.sample_points()[:, 1]
+
+            if cond.name != 'inner':
+                plt.scatter(t, x, c='black', marker='X')
+            else:
+                plt.scatter(t, x, c='r', marker='.', alpha=0.1)
+
+        plt.xlabel('$t$')
+        plt.ylabel('$x$')
+
+        plt.title('Positions of collocation points and boundary data')
+        # plt.savefig('Xdata_Burgers.pdf', bbox_inches='tight', dpi=300)
+        plt.show()
+
+    def plot_loss():
+        fig = plt.figure(figsize=(9, 6))
+        ax = fig.add_subplot(111)
+        ax.semilogy(range(len(solver.loss_history)), solver.loss_history, 'k-')
+        ax.set_xlabel('$n_{epoch}$')
+        ax.set_ylabel('$\\phi_{n_{epoch}}$')
+        plt.show()
+
+    def plot_u():
+        # Set up meshgrid
+        N = 1000
+        tspace = np.linspace(bounds[0][0], bounds[1][0], N + 1)
+        xspace = np.linspace(bounds[0][1], bounds[1][1], N + 1)
+        T, X = np.meshgrid(tspace, xspace)
+        Xgrid = np.vstack([T.flatten(), X.flatten()]).T
+
+        # Determine predictions of u(t, x)
+        upred = solver.model(tf.cast(Xgrid, 'float32'))[:, 0]
+        minu, maxu = np.min(upred), np.max(upred)
+
+        # Reshape upred
+        U = upred.numpy().reshape(N + 1, N + 1)
+
+        # Surface plot of solution u(t,x)
+        fig = plt.figure(figsize=(9, 6))
+        ax = fig.add_subplot(111, projection='3d')
+        ax.plot_surface(T, X, U, cmap='viridis')
+        ax.view_init(35, 35)
+        ax.set_xlabel('$t$')
+        ax.set_ylabel('$x$')
+        ax.set_zlabel('$u_\\theta(t,x)$')
+        ax.set_title('Solution of equation')
+        # plt.savefig('PDE_Solution_3D.pdf', bbox_inches='tight', dpi=300);
+
+        # from ODESolver.One_step_methods import runge_kutta
+        #
+        # ode = lambda x, c: np.array([x[2], c * (1 - x[1] ** 2) * x[2] - x[1]])
+        # for c in np.linspace(0, 3, 31):
+        #     print("\rc = %.2f" % c, end="")
+        #     x, y = runge_kutta(lambda x: ode(x, c), np.array([1, 0]), [0, 6], 5e-3)
+        #     ax.plot(x, np.ones_like(x) * c, y[:, 0], color='red')
+        #
+        # plt.show()
+
+        fig = plt.figure(figsize=(9, 6))
+        plt.imshow(U, cmap='viridis')
+        ax.set_xlabel('$t$')
+        ax.set_ylabel('$x$')
+        ax.set_title('Solution of equation')
+        # plt.savefig('PDE_Solution_2D.pdf', bbox_inches='tight', dpi=300);
+        plt.show()
+
+        return minu, maxu
+
+    def animate_solution():
+        fig, ax = plt.subplots()
+        xdata, ydata = tf.linspace(bounds[0][1], bounds[1][1], 1000), []
+        ln, = plt.plot([], [], color='b')
+        title = ax.text(0, maxu * 0.9, "", ha='center')
+
+        def init():
+            ax.set_xlim(bounds[0][1], bounds[1][1])
+            ax.set_ylim(minu, maxu)
+
+            return ln,
+
+        def update(frame):
+            ydata = solver.model(tf.transpose(tf.stack([tf.ones_like(xdata) * frame, xdata])))[:, 0]
+            ln.set_data(xdata, ydata)
+            title.set_text(u"t = {:.3f}".format(frame))
+
+            return ln, title
+
+        ani = FuncAnimation(fig, update, frames=np.linspace(bounds[0][0], bounds[1][0], 300),
+                            interval=16, init_func=init, blit=True)
+        plt.show()
+
+    inner = [cond for cond in solver.bvp.conditions if cond.name == "inner"][0]
+    bounds = inner.get_region_bounds()
+
+    plot_sample_points()
+    plot_loss()
+    minu, maxu = plot_u()
+    animate_solution()
+
+
+def plot_2D(solver):
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+
+    N = 100
+    xspace = np.linspace(0, 1, N)
+    yspace = np.linspace(0, 1, N)
+    X, Y = np.meshgrid(xspace, yspace)
+    XYgrid = np.vstack([X.flatten(), Y.flatten()]).T
+    XYgrid = tf.cast(XYgrid, 'float32')
+
+    plot = ax.plot_surface(X, Y, 0 * X, cmap='viridis')
+
+    def data_gen(frame, plot):
+        x, y = XYgrid[:, 0], XYgrid[:, 1]
+        z = solver.model(tf.transpose(tf.stack([tf.ones_like(x) * frame, x, y])))
+        Z = tf.reshape(z, X.shape)
+
+        ax.clear()
+        plot = ax.plot_surface(X, Y, Z, cmap='viridis')
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_zlim(-0.1, 1)
+
+        title = ax.set_title("t = %.2f" % frame, ha='center')
+        return plot, title
+
+    anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 120),
+                         interval=16, blit=False)
+
+    anim.save("../out/2d_wave_eq.gif", fps=30)
+    plt.show()
+
+
+def plot_2Dvectorfield(solver):
+    fig = plt.figure()
+    ax = fig.add_subplot()
+
+    N = 30
+    xspace = np.linspace(-2, 2, N)
+    yspace = np.linspace(-2, 2, N)
+    X, Y = np.meshgrid(xspace, yspace)
+    XYgrid = np.vstack([X.flatten(), Y.flatten()]).T
+    XYgrid = tf.cast(XYgrid, 'float32')
+
+    x, y = XYgrid[:, 0], XYgrid[:, 1]
+    z = solver.model(tf.transpose(tf.stack([tf.zeros_like(x), x, y])))
+    Zx = tf.reshape(z[:, 0], X.shape)
+    Zy = tf.reshape(z[:, 1], X.shape)
+    plot = ax.quiver(X, Y, Zx, Zy, scale=1.0)
+
+    def data_gen(frame, plot):
+        x, y = XYgrid[:, 0], XYgrid[:, 1]
+        z = solver.model(tf.transpose(tf.stack([tf.ones_like(x) * frame, x, y])))
+        Zx = tf.reshape(z[:, 0], X.shape)
+        Zy = tf.reshape(z[:, 1], X.shape)
+
+        ax.clear()
+        plot = ax.quiver(X, Y, Zx, Zy, scale=1.0)
+        ax.set_xlim(-2, 2)
+        ax.set_ylim(-2, 2)
+
+        title = ax.set_title("t = %.2f" % frame, ha='center')
+        return plot, title
+
+    anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 240),
+                         interval=16, blit=False)
+
+    plt.show()
+
+
+def plot_phaseplot(solver):
+    fig, ax = plt.subplots()
+
+    tspace = tf.linspace([0], [10], 600, axis=0)
+    xy = solver.model(tspace)
+    xd, yd = xy[:, 0].numpy(), xy[:, 1].numpy()
+    pendulum, = plt.plot([], [], 'lightgray')
+    ln, = plt.plot([], [], 'cornflowerblue')
+    sc, = plt.plot([], [], 'bo', markersize=10)
+
+    def init():
+        ax.set_xlim(-1.25, 1.25)
+        ax.set_ylim(-1.25, 0.25)
+        return ln, sc, pendulum
+
+    def update(frame):
+        trail = 20
+        start = max(frame - trail, 0)
+        pendulum.set_data([0, xd[frame]], [0, yd[frame]])
+        ln.set_data(xd[start:frame+1], yd[start:frame+1])
+        sc.set_data(xd[frame], yd[frame])
+        plt.title("t = %.2f" % frame)
+        return ln, sc, pendulum
+
+    anim = FuncAnimation(fig, update, frames=np.arange(len(tspace)),
+                        init_func=init, blit=False, interval=16)
+
+    anim.save("../out/pendulum.gif", fps=60)
+    plt.show()
