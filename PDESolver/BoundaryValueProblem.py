@@ -68,6 +68,12 @@ class BoundaryValueProblem:
 
 
 class WaveEquation1D(BoundaryValueProblem):
+    """
+    Class defining the 1D wave equation as a boundary value problem.
+
+    (t, x) |-> y
+    """
+
     @classproperty
     def conditions(cls):
         return [
@@ -107,6 +113,12 @@ class WaveEquation1D(BoundaryValueProblem):
 
 
 class WaveEquation2D(BoundaryValueProblem):
+    """
+    Class defining the 2D wave equation as a boundary value problem.
+
+    (t, x, y) |-> z
+    """
+
     @classproperty
     def conditions(cls):
         return [
@@ -144,6 +156,12 @@ class WaveEquation2D(BoundaryValueProblem):
 
 
 class HeatEquation2D(BoundaryValueProblem):
+    """
+    Class defining the 2D heat equation as a boundary value problem.
+
+    (t, x, y) |-> z
+    """
+
     @classproperty
     def conditions(cls):
         return [
@@ -178,7 +196,68 @@ class HeatEquation2D(BoundaryValueProblem):
         return {"t": t, "x": x, "y": y, "u": u, "u_t": u_t, "u_x": u_x, "u_y": u_yy, "u_xx": u_xx, "u_yy": u_yy}
 
 
+class ControlledHeatEquation1D(BoundaryValueProblem):
+    """
+    Class defining the 1D heat equation as a boundary value problem with an aspect of control. (EXPERIMENTAL)
+
+    (t, x) |-> (y, control)
+    """
+
+    @classproperty
+    def conditions(cls):
+        return [
+            Condition("initial",
+                      lambda Du: Du["u"],
+                      (Cuboid([0, 0], [0, 1]), 100)),
+            Condition("control",
+                      lambda Du: Du["u"] - Du["uR"],
+                      (Cuboid([0, 1], [1, 1]), 100)),
+            Condition("goal",
+                      lambda Du: Du["u"] - (1 - tf.cos(np.pi * Du["x"])) / 2,
+                      (Cuboid([1, 0], [1, 1]), 100)),
+            Condition("boundary",
+                      lambda Du: Du["u_x"],
+                      (Union(Cuboid([0, 0], [1, 0]), Cuboid([0, 1], [1, 1])), 200)),
+            Condition("inner",
+                      lambda Du: Du["u_t"] - Du["u_xx"],
+                      (Cuboid([0, 0], [1, 1]), 1600))
+        ]
+
+    @staticmethod
+    def calculate_differentials(model, freeVariables):
+        def y(x):
+            return model(x)[:, 0]
+
+        def control(x):
+            return model(x)[:, 1]
+
+        with tf.GradientTape(persistent=True) as tape:
+            t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
+
+            tape.watch(t)
+            tape.watch(x)
+
+            ipt = tf.stack([t[:, 0], x[:, 0]], axis=1)
+            u = y(ipt)
+            uR = control(ipt)
+
+            u_t = tape.gradient(u, t)
+            u_x = tape.gradient(u, x)
+
+            u_xx = tape.gradient(u_x, x)
+
+        del tape
+
+        return {"t": t, "x": x, "u": u, "u_t": u_t, "u_x": u_x, "u_xx": u_xx, "uR": uR}
+
+
 class ControlledHeatEquation2D(BoundaryValueProblem):
+    """
+    Class defining the 2D heat equation as a temporal boundary value problem. (EXPERIMENTAL)
+
+    (t, x, y) |-> z
+    """
+
     @classproperty
     def conditions(cls):
         return [
@@ -218,57 +297,13 @@ class ControlledHeatEquation2D(BoundaryValueProblem):
         return {"t": t, "x": x, "y": y, "u": u, "u_t": u_t, "u_x": u_x, "u_y": u_yy, "u_xx": u_xx, "u_yy": u_yy}
 
 
-class ControlledHeatEquation1D(BoundaryValueProblem):
-    @classproperty
-    def conditions(cls):
-        return [
-            Condition("initial",
-                      lambda Du: Du["u"],
-                      (Cuboid([0, 0], [0, 1]), 100)),
-            Condition("control",
-                      lambda Du: Du["u"] - Du["uR"],
-                      (Cuboid([0, 1], [1, 1]), 100)),
-            Condition("goal",
-                      lambda Du: Du["u"] - (1 - tf.cos(np.pi * Du["x"])) / 2,
-                      (Cuboid([1, 0], [1, 1]), 100)),
-            Condition("boundary",
-                      lambda Du: Du["u_x"],
-                      (Union(Cuboid([0, 0], [1, 0]), Cuboid([0, 1], [1, 1])), 200)),
-            Condition("inner",
-                      lambda Du: Du["u_t"] - Du["u_xx"],
-                      (Cuboid([0, 0], [1, 1]), 1600))
-        ]
-
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        def y(x):
-            return model(x)[:, 0]
-
-        def control(x):
-            return model(x)[:, 1]
-
-
-        with tf.GradientTape(persistent=True) as tape:
-            t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
-
-            tape.watch(t)
-            tape.watch(x)
-
-            ipt = tf.stack([t[:, 0], x[:, 0]], axis=1)
-            u = y(ipt)
-            uR = control(ipt)
-
-            u_t = tape.gradient(u, t)
-            u_x = tape.gradient(u, x)
-
-            u_xx = tape.gradient(u_x, x)
-
-        del tape
-
-        return {"t": t, "x": x, "u": u, "u_t": u_t, "u_x": u_x, "u_xx": u_xx, "uR": uR}
-
-
 class BurgersEquation(BoundaryValueProblem):
+    """
+    Class defining the Burgers equation as a boundary value problem.
+
+    (t, x) |-> y
+    """
+
     @classproperty
     def conditions(cls):
         return [
@@ -304,6 +339,12 @@ class BurgersEquation(BoundaryValueProblem):
 
 
 class VanDerPolEquation(BoundaryValueProblem):
+    """
+    Class defining the Van-der-Pol equation as a boundary value problem.
+
+    (t, x) |-> y
+    """
+
     @classproperty
     def conditions(cls):
         return [
@@ -341,6 +382,12 @@ class VanDerPolEquation(BoundaryValueProblem):
 
 
 class AllenCahnEquation(BoundaryValueProblem):
+    """
+    Class defining the Allen-Cahn equation as a boundary value problem.
+
+    (t, x) |-> y
+    """
+
     @classproperty
     def conditions(cls):
         return [
@@ -384,6 +431,12 @@ class AllenCahnEquation(BoundaryValueProblem):
 
 
 class ReactionDiffusionEquation(BoundaryValueProblem):
+    """
+    Class defining the Reaction-Diffusion equation as a boundary value problem.
+
+    (t, x) |-> y
+    """
+
     @classproperty
     def conditions(cls):
         return [
@@ -420,6 +473,12 @@ class ReactionDiffusionEquation(BoundaryValueProblem):
 
 
 class MinimalSurfaceEquation(BoundaryValueProblem):
+    """
+    Class defining the minimal surface equation as a boundary value problem.
+
+    (x, y) |-> z
+    """
+
     @classproperty
     def conditions(cls):
         return [
@@ -459,6 +518,12 @@ class MinimalSurfaceEquation(BoundaryValueProblem):
 
 
 class FluidEquation2D(BoundaryValueProblem):
+    """
+    Class defining the fluid equation as a boundary value problem. (EXPERIMENTAL)
+
+    (t, x, y) |-> (v_x, v_y)
+    """
+
     @classproperty
     def conditions(cls):
         def field(x, y):
@@ -524,6 +589,11 @@ class FluidEquation2D(BoundaryValueProblem):
 
 
 class VectorTest(BoundaryValueProblem):
+    """
+    Class defining a equation for reconstructing a gradient field. (EXPERIMENTAL)
+
+    (t, x, y) |-> (v_x, v_y)
+    """
     @classproperty
     def conditions(cls):
         def field(x, y):
@@ -570,6 +640,12 @@ class VectorTest(BoundaryValueProblem):
 
 
 class DAE(BoundaryValueProblem):
+    """
+    Class defining the differential algebraic equation for a pendulum.
+
+    t |-> (x_1, x_2, lambda)
+    """
+
     @classproperty
     def conditions(cls):
         def initPos(t):
