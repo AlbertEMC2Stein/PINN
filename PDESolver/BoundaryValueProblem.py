@@ -1,4 +1,4 @@
-from src.Sampling import *
+from PDESolver.Sampling import *
 
 
 class classproperty(object):
