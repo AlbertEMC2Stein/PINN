@@ -14,11 +14,18 @@ class Condition:
         """
         Class for defining conditions for boundary value problems.
 
-        :param name: Name of the condition
-        :param residue_fn: Function that calculates the residue of the condition
-        :param region_samples_pair: Tuple of (region, number of samples)
-        :param sampler: Sampler to use for sampling points in the region
-        :param weight: Weight of the condition
+        Parameters
+        -----------
+        name: str
+            Name of the condition
+        residue_fn: dict |-> tensor
+            Function that calculates the residue of the condition
+        region_samples_pair: tuple
+            Tuple of (region, number of samples)
+        sampler: Sampler
+            Sampler to use for sampling points in the region
+        weight: float
+            Weight of the condition
         """
 
         self.name = name
@@ -35,7 +42,9 @@ class Condition:
         """
         Returns the bounds of the region.
 
-        :return: Tuple of (lower bound, upper bound)
+        Returns
+        -----------
+        tuple: Tuple of (lower bound, upper bound)
         """
 
         return self._region.get_bounds()
@@ -50,7 +59,10 @@ class BoundaryValueProblem:
     def conditions(cls):
         """
         Returns the conditions of the boundary value problem.
-        :return: List of conditions
+
+        Returns
+        -----------
+        list: List of conditions
         """
 
         return []
@@ -60,9 +72,16 @@ class BoundaryValueProblem:
         """
         Calculates the differentials of the model at the given points.
 
-        :param model: Model to calculate the differentials of
-        :param freeVariables: Tensor of points to calculate the differentials at
-        :return: Tensor of differentials
+        Parameters
+        -----------
+        model: neural network
+            Model to calculate the differentials of
+        freeVariables: tensor
+            Tensor of points to calculate the differentials at
+
+        Returns
+        -----------
+        tensor: Tensor of differentials
         """
         ...
 

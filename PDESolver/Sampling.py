@@ -13,16 +13,27 @@ class Region:
     def pick(self, n, sampler):
         """
         Samples n points from the region.
-        :param n: number of points to sample
-        :param sampler: sampler to use
-        :return: numpy array of shape (n, dimension)
+
+        Parameters
+        -----------
+        n: int
+            Number of points to sample
+        sampler: Sampler
+            Sampler to use
+
+        Returns
+        -----------
+        array: Array of shape (n, dimension)
         """
         ...
 
     def get_bounds(self):
         """
         Returns the bounds of the region.
-        :return: numpy array of shape (2, dimension)
+
+        Returns
+        -----------
+        array: Array of shape (2, dimension)
         """
         ...
 
@@ -31,8 +42,13 @@ class Cuboid(Region):
     def __init__(self, corner1, corner2):
         """
         Constructor for a cuboid region which sides are parallel to all axis
-        :param corner1: coordinates of the first corner
-        :param corner2: coordinates of the second corner
+
+        Parameters
+        -----------
+        corner1: list
+            Coordinates of the first corner
+        corner2: list
+            Coordinates of the second corner
         """
 
         self.corner1 = corner1
@@ -80,7 +96,11 @@ class Union(Region):
     def __init__(self, *regions):
         """
         Constructor for a union of regions.
-        :param regions: list of regions
+
+        Parameters
+        -----------
+        regions: list
+            List of regions
         """
 
         super().__init__()
@@ -105,7 +125,10 @@ class Sampler:
         """
         Constructor for a Sampler class.
 
-        :attr isPersistent: boolean indicating whether the sampler is persistent
+        Attributes
+        -----------
+        isPersistent: boolean
+            Indicating whether the sampler is persistent
         """
 
         self.isPersistent = None
@@ -113,8 +136,15 @@ class Sampler:
     def pick(self, n):
         """
         Samples n points from [0; 1] following a pattern determined by the used Sampler
-        :param n: number of points to sample
-        :return: numpy array of shape (n,)
+
+        Parameters
+        -----------
+        n: int
+            Number of points to sample
+
+        Returns
+        -----------
+        array: Array of shape (n,)
         """
         ...
 
@@ -124,7 +154,10 @@ class Random(Sampler):
         """
         Constructor for a Random Sampler class.
 
-        :attr isPersistent: boolean indicating whether the sampler is persistent
+        Attributes
+        -----------
+        isPersistent: boolean
+            Indicating whether the sampler is persistent
         """
 
         super().__init__()
@@ -133,8 +166,15 @@ class Random(Sampler):
     def pick(self, n):
         """
         Samples n uniformly distributed points from [0; 1].
-        :param n: number of points to sample
-        :return: numpy array of shape (n,)
+
+        Parameters
+        -----------
+        n: int
+            Number of points to sample
+
+        Returns
+        -----------
+        array: Array of shape (n,)
         """
 
         return np.random.uniform(size=(1,n))
@@ -145,7 +185,10 @@ class FirstRandom(Sampler):
         """
         Constructor for a FirstRandom Sampler class.
 
-        :attr isPersistent: boolean indicating whether the sampler is persistent
+        Attributes
+        -----------
+        isPersistent: boolean
+            Indicating whether the sampler is persistent
         """
 
         super().__init__()
@@ -156,8 +199,14 @@ class FirstRandom(Sampler):
         Samples n uniformly distributed points from [0; 1].
         Same as Random but the with isPersistent=True.
 
-        :param n: number of points to sample
-        :return: numpy array of shape (n,)
+        Parameters
+        -----------
+        n: int
+            Number of points to sample
+
+        Returns
+        -----------
+        array: Array of shape (n,)
         """
         return np.random.uniform(size=(1,n))
 
@@ -167,7 +216,10 @@ class Equidistant(Sampler):
         """
         Constructor for a Equidistant Sampler class.
 
-        :attr isPersistent: boolean indicating whether the sampler is persistent
+        Attributes
+        -----------
+        isPersistent: boolean
+            Indicating whether the sampler is persistent
         """
 
         super().__init__()
@@ -177,7 +229,13 @@ class Equidistant(Sampler):
         """
         Samples n equidistant points from [0; 1].
 
-        :param n: number of points to sample
-        :return: numpy array of shape (n,)
+        Parameters
+        -----------
+        n: int
+            Number of points to sample
+
+        Returns
+        -----------
+        array: Array of shape (n,)
         """
         return np.linspace(0, 1, n)

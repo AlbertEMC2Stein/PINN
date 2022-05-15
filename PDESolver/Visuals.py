@@ -26,7 +26,10 @@ def plot_1D(solver):
     """
     Plots the solution of a BVP defined in one spacial dimension and one output.
 
-    :param solver: Solver object
+    Parameters
+    -----------
+    solver: Solver
+        Trained solver to be visualized
     """
 
     def plot_sample_points():
@@ -122,7 +125,10 @@ def plot_2D(solver):
     """
     Plots the solution of a BVP defined in two spacial dimensions and one output.
 
-    :param solver: Solver object
+    Parameters
+    -----------
+    solver: Solver
+        Trained solver to be visualized
     """
 
     def animate_solution():
@@ -165,7 +171,11 @@ def plot_2D(solver):
 def plot_2Dvectorfield(solver):
     """
     Plots the solution of a BVP defined in two spacial dimensions and two outputs.
-    :param solver: Solver object
+
+    Parameters
+    -----------
+    solver: Solver
+        Trained solver to be visualized
     """
 
     def animate_solution():
@@ -213,8 +223,11 @@ def plot_2Dvectorfield(solver):
 def plot_phaseplot(solver):
     """
     Plots the solution of a DAE defined in one temporal dimension and two spacial outputs.
-    :param solver: Solver object
-    :return:
+
+    Parameters
+    -----------
+    solver: Solver
+        Trained solver to be visualized
     """
 
     def animate_solution():

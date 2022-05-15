@@ -43,11 +43,18 @@ class Condition:
         &#34;&#34;&#34;
         Class for defining conditions for boundary value problems.
 
-        :param name: Name of the condition
-        :param residue_fn: Function that calculates the residue of the condition
-        :param region_samples_pair: Tuple of (region, number of samples)
-        :param sampler: Sampler to use for sampling points in the region
-        :param weight: Weight of the condition
+        Parameters
+        -----------
+        name: str
+            Name of the condition
+        residue_fn: dict |-&gt; tensor
+            Function that calculates the residue of the condition
+        region_samples_pair: tuple
+            Tuple of (region, number of samples)
+        sampler: Sampler
+            Sampler to use for sampling points in the region
+        weight: float
+            Weight of the condition
         &#34;&#34;&#34;
 
         self.name = name
@@ -64,7 +71,9 @@ class Condition:
         &#34;&#34;&#34;
         Returns the bounds of the region.
 
-        :return: Tuple of (lower bound, upper bound)
+        Returns
+        -----------
+        tuple: Tuple of (lower bound, upper bound)
         &#34;&#34;&#34;
 
         return self._region.get_bounds()
@@ -79,7 +88,10 @@ class BoundaryValueProblem:
     def conditions(cls):
         &#34;&#34;&#34;
         Returns the conditions of the boundary value problem.
-        :return: List of conditions
+
+        Returns
+        -----------
+        list: List of conditions
         &#34;&#34;&#34;
 
         return []
@@ -89,14 +101,27 @@ class BoundaryValueProblem:
         &#34;&#34;&#34;
         Calculates the differentials of the model at the given points.
 
-        :param model: Model to calculate the differentials of
-        :param freeVariables: Tensor of points to calculate the differentials at
-        :return: Tensor of differentials
+        Parameters
+        -----------
+        model: neural network
+            Model to calculate the differentials of
+        freeVariables: tensor
+            Tensor of points to calculate the differentials at
+
+        Returns
+        -----------
+        tensor: Tensor of differentials
         &#34;&#34;&#34;
         ...
 
 
 class WaveEquation1D(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the 1D wave equation as a boundary value problem.
+
+    (t, x) |-&gt; y
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         return [
@@ -136,6 +161,12 @@ class WaveEquation1D(BoundaryValueProblem):
 
 
 class WaveEquation2D(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the 2D wave equation as a boundary value problem.
+
+    (t, x, y) |-&gt; z
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         return [
@@ -173,6 +204,12 @@ class WaveEquation2D(BoundaryValueProblem):
 
 
 class HeatEquation2D(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the 2D heat equation as a boundary value problem.
+
+    (t, x, y) |-&gt; z
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         return [
@@ -207,7 +244,68 @@ class HeatEquation2D(BoundaryValueProblem):
         return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;y&#34;: y, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_y&#34;: u_yy, &#34;u_xx&#34;: u_xx, &#34;u_yy&#34;: u_yy}
 
 
+class ControlledHeatEquation1D(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the 1D heat equation as a boundary value problem with an aspect of control. (EXPERIMENTAL)
+
+    (t, x) |-&gt; (y, control)
+    &#34;&#34;&#34;
+
+    @classproperty
+    def conditions(cls):
+        return [
+            Condition(&#34;initial&#34;,
+                      lambda Du: Du[&#34;u&#34;],
+                      (Cuboid([0, 0], [0, 1]), 100)),
+            Condition(&#34;control&#34;,
+                      lambda Du: Du[&#34;u&#34;] - Du[&#34;uR&#34;],
+                      (Cuboid([0, 1], [1, 1]), 100)),
+            Condition(&#34;goal&#34;,
+                      lambda Du: Du[&#34;u&#34;] - (1 - tf.cos(np.pi * Du[&#34;x&#34;])) / 2,
+                      (Cuboid([1, 0], [1, 1]), 100)),
+            Condition(&#34;boundary&#34;,
+                      lambda Du: Du[&#34;u_x&#34;],
+                      (Union(Cuboid([0, 0], [1, 0]), Cuboid([0, 1], [1, 1])), 200)),
+            Condition(&#34;inner&#34;,
+                      lambda Du: Du[&#34;u_t&#34;] - Du[&#34;u_xx&#34;],
+                      (Cuboid([0, 0], [1, 1]), 1600))
+        ]
+
+    @staticmethod
+    def calculate_differentials(model, freeVariables):
+        def y(x):
+            return model(x)[:, 0]
+
+        def control(x):
+            return model(x)[:, 1]
+
+        with tf.GradientTape(persistent=True) as tape:
+            t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
+
+            tape.watch(t)
+            tape.watch(x)
+
+            ipt = tf.stack([t[:, 0], x[:, 0]], axis=1)
+            u = y(ipt)
+            uR = control(ipt)
+
+            u_t = tape.gradient(u, t)
+            u_x = tape.gradient(u, x)
+
+            u_xx = tape.gradient(u_x, x)
+
+        del tape
+
+        return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_xx&#34;: u_xx, &#34;uR&#34;: uR}
+
+
 class ControlledHeatEquation2D(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the 2D heat equation as a temporal boundary value problem. (EXPERIMENTAL)
+
+    (t, x, y) |-&gt; z
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         return [
@@ -247,57 +345,13 @@ class ControlledHeatEquation2D(BoundaryValueProblem):
         return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;y&#34;: y, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_y&#34;: u_yy, &#34;u_xx&#34;: u_xx, &#34;u_yy&#34;: u_yy}
 
 
-class ControlledHeatEquation1D(BoundaryValueProblem):
-    @classproperty
-    def conditions(cls):
-        return [
-            Condition(&#34;initial&#34;,
-                      lambda Du: Du[&#34;u&#34;],
-                      (Cuboid([0, 0], [0, 1]), 100)),
-            Condition(&#34;control&#34;,
-                      lambda Du: Du[&#34;u&#34;] - Du[&#34;uR&#34;],
-                      (Cuboid([0, 1], [1, 1]), 100)),
-            Condition(&#34;goal&#34;,
-                      lambda Du: Du[&#34;u&#34;] - (1 - tf.cos(np.pi * Du[&#34;x&#34;])) / 2,
-                      (Cuboid([1, 0], [1, 1]), 100)),
-            Condition(&#34;boundary&#34;,
-                      lambda Du: Du[&#34;u_x&#34;],
-                      (Union(Cuboid([0, 0], [1, 0]), Cuboid([0, 1], [1, 1])), 200)),
-            Condition(&#34;inner&#34;,
-                      lambda Du: Du[&#34;u_t&#34;] - Du[&#34;u_xx&#34;],
-                      (Cuboid([0, 0], [1, 1]), 1600))
-        ]
-
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        def y(x):
-            return model(x)[:, 0]
-
-        def control(x):
-            return model(x)[:, 1]
-
-
-        with tf.GradientTape(persistent=True) as tape:
-            t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
-
-            tape.watch(t)
-            tape.watch(x)
-
-            ipt = tf.stack([t[:, 0], x[:, 0]], axis=1)
-            u = y(ipt)
-            uR = control(ipt)
-
-            u_t = tape.gradient(u, t)
-            u_x = tape.gradient(u, x)
-
-            u_xx = tape.gradient(u_x, x)
-
-        del tape
-
-        return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_xx&#34;: u_xx, &#34;uR&#34;: uR}
-
-
 class BurgersEquation(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the Burgers equation as a boundary value problem.
+
+    (t, x) |-&gt; y
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         return [
@@ -333,6 +387,12 @@ class BurgersEquation(BoundaryValueProblem):
 
 
 class VanDerPolEquation(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the Van-der-Pol equation as a boundary value problem.
+
+    (t, x) |-&gt; y
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         return [
@@ -370,6 +430,12 @@ class VanDerPolEquation(BoundaryValueProblem):
 
 
 class AllenCahnEquation(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the Allen-Cahn equation as a boundary value problem.
+
+    (t, x) |-&gt; y
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         return [
@@ -413,6 +479,12 @@ class AllenCahnEquation(BoundaryValueProblem):
 
 
 class ReactionDiffusionEquation(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the Reaction-Diffusion equation as a boundary value problem.
+
+    (t, x) |-&gt; y
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         return [
@@ -449,6 +521,12 @@ class ReactionDiffusionEquation(BoundaryValueProblem):
 
 
 class MinimalSurfaceEquation(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the minimal surface equation as a boundary value problem.
+
+    (x, y) |-&gt; z
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         return [
@@ -488,6 +566,12 @@ class MinimalSurfaceEquation(BoundaryValueProblem):
 
 
 class FluidEquation2D(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the fluid equation as a boundary value problem. (EXPERIMENTAL)
+
+    (t, x, y) |-&gt; (v_x, v_y)
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         def field(x, y):
@@ -553,6 +637,11 @@ class FluidEquation2D(BoundaryValueProblem):
 
 
 class VectorTest(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining a equation for reconstructing a gradient field. (EXPERIMENTAL)
+
+    (t, x, y) |-&gt; (v_x, v_y)
+    &#34;&#34;&#34;
     @classproperty
     def conditions(cls):
         def field(x, y):
@@ -599,6 +688,12 @@ class VectorTest(BoundaryValueProblem):
 
 
 class DAE(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the differential algebraic equation for a pendulum.
+
+    t |-&gt; (x_1, x_2, lambda)
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         def initPos(t):
@@ -671,12 +766,19 @@ class DAE(BoundaryValueProblem):
 <span>class <span class="ident">AllenCahnEquation</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class for defining boundary value problems.</p></div>
+<div class="desc"><p>Class defining the Allen-Cahn equation as a boundary value problem.</p>
+<p>(t, x) |-&gt; y</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class AllenCahnEquation(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the Allen-Cahn equation as a boundary value problem.
+
+    (t, x) |-&gt; y
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         return [
@@ -756,7 +858,10 @@ class DAE(BoundaryValueProblem):
     def conditions(cls):
         &#34;&#34;&#34;
         Returns the conditions of the boundary value problem.
-        :return: List of conditions
+
+        Returns
+        -----------
+        list: List of conditions
         &#34;&#34;&#34;
 
         return []
@@ -766,9 +871,16 @@ class DAE(BoundaryValueProblem):
         &#34;&#34;&#34;
         Calculates the differentials of the model at the given points.
 
-        :param model: Model to calculate the differentials of
-        :param freeVariables: Tensor of points to calculate the differentials at
-        :return: Tensor of differentials
+        Parameters
+        -----------
+        model: neural network
+            Model to calculate the differentials of
+        freeVariables: tensor
+            Tensor of points to calculate the differentials at
+
+        Returns
+        -----------
+        tensor: Tensor of differentials
         &#34;&#34;&#34;
         ...</code></pre>
 </details>
@@ -802,9 +914,18 @@ class DAE(BoundaryValueProblem):
 </code></dt>
 <dd>
 <div class="desc"><p>Calculates the differentials of the model at the given points.</p>
-<p>:param model: Model to calculate the differentials of
-:param freeVariables: Tensor of points to calculate the differentials at
-:return: Tensor of differentials</p></div>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>model</code></strong> :&ensp;<code>neural network</code></dt>
+<dd>Model to calculate the differentials of</dd>
+<dt><strong><code>freeVariables</code></strong> :&ensp;<code>tensor</code></dt>
+<dd>Tensor of points to calculate the differentials at</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>tensor</code></strong> :&ensp;<code>Tensor</code> of <code>differentials</code></dt>
+<dd>&nbsp;</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -814,9 +935,16 @@ def calculate_differentials(model, freeVariables):
     &#34;&#34;&#34;
     Calculates the differentials of the model at the given points.
 
-    :param model: Model to calculate the differentials of
-    :param freeVariables: Tensor of points to calculate the differentials at
-    :return: Tensor of differentials
+    Parameters
+    -----------
+    model: neural network
+        Model to calculate the differentials of
+    freeVariables: tensor
+        Tensor of points to calculate the differentials at
+
+    Returns
+    -----------
+    tensor: Tensor of differentials
     &#34;&#34;&#34;
     ...</code></pre>
 </details>
@@ -827,12 +955,19 @@ def calculate_differentials(model, freeVariables):
 <span>class <span class="ident">BurgersEquation</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class for defining boundary value problems.</p></div>
+<div class="desc"><p>Class defining the Burgers equation as a boundary value problem.</p>
+<p>(t, x) |-&gt; y</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class BurgersEquation(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the Burgers equation as a boundary value problem.
+
+    (t, x) |-&gt; y
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         return [
@@ -892,11 +1027,19 @@ def calculate_differentials(model, freeVariables):
 </code></dt>
 <dd>
 <div class="desc"><p>Class for defining conditions for boundary value problems.</p>
-<p>:param name: Name of the condition
-:param residue_fn: Function that calculates the residue of the condition
-:param region_samples_pair: Tuple of (region, number of samples)
-:param sampler: Sampler to use for sampling points in the region
-:param weight: Weight of the condition</p></div>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>name</code></strong> :&ensp;<code>str</code></dt>
+<dd>Name of the condition</dd>
+<dt><strong><code>residue_fn</code></strong> :&ensp;<code>dict |-&gt; tensor</code></dt>
+<dd>Function that calculates the residue of the condition</dd>
+<dt><strong><code>region_samples_pair</code></strong> :&ensp;<code>tuple</code></dt>
+<dd>Tuple of (region, number of samples)</dd>
+<dt><strong><code>sampler</code></strong> :&ensp;<code>Sampler</code></dt>
+<dd>Sampler to use for sampling points in the region</dd>
+<dt><strong><code>weight</code></strong> :&ensp;<code>float</code></dt>
+<dd>Weight of the condition</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -906,11 +1049,18 @@ def calculate_differentials(model, freeVariables):
         &#34;&#34;&#34;
         Class for defining conditions for boundary value problems.
 
-        :param name: Name of the condition
-        :param residue_fn: Function that calculates the residue of the condition
-        :param region_samples_pair: Tuple of (region, number of samples)
-        :param sampler: Sampler to use for sampling points in the region
-        :param weight: Weight of the condition
+        Parameters
+        -----------
+        name: str
+            Name of the condition
+        residue_fn: dict |-&gt; tensor
+            Function that calculates the residue of the condition
+        region_samples_pair: tuple
+            Tuple of (region, number of samples)
+        sampler: Sampler
+            Sampler to use for sampling points in the region
+        weight: float
+            Weight of the condition
         &#34;&#34;&#34;
 
         self.name = name
@@ -927,7 +1077,9 @@ def calculate_differentials(model, freeVariables):
         &#34;&#34;&#34;
         Returns the bounds of the region.
 
-        :return: Tuple of (lower bound, upper bound)
+        Returns
+        -----------
+        tuple: Tuple of (lower bound, upper bound)
         &#34;&#34;&#34;
 
         return self._region.get_bounds()</code></pre>
@@ -939,7 +1091,11 @@ def calculate_differentials(model, freeVariables):
 </code></dt>
 <dd>
 <div class="desc"><p>Returns the bounds of the region.</p>
-<p>:return: Tuple of (lower bound, upper bound)</p></div>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>tuple</code></strong> :&ensp;<code>Tuple</code> of <code>(lower bound, upper bound)</code></dt>
+<dd>&nbsp;</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -948,7 +1104,9 @@ def calculate_differentials(model, freeVariables):
     &#34;&#34;&#34;
     Returns the bounds of the region.
 
-    :return: Tuple of (lower bound, upper bound)
+    Returns
+    -----------
+    tuple: Tuple of (lower bound, upper bound)
     &#34;&#34;&#34;
 
     return self._region.get_bounds()</code></pre>
@@ -960,12 +1118,19 @@ def calculate_differentials(model, freeVariables):
 <span>class <span class="ident">ControlledHeatEquation1D</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class for defining boundary value problems.</p></div>
+<div class="desc"><p>Class defining the 1D heat equation as a boundary value problem with an aspect of control. (EXPERIMENTAL)</p>
+<p>(t, x) |-&gt; (y, control)</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class ControlledHeatEquation1D(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the 1D heat equation as a boundary value problem with an aspect of control. (EXPERIMENTAL)
+
+    (t, x) |-&gt; (y, control)
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         return [
@@ -993,7 +1158,6 @@ def calculate_differentials(model, freeVariables):
 
         def control(x):
             return model(x)[:, 1]
-
 
         with tf.GradientTape(persistent=True) as tape:
             t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
@@ -1038,12 +1202,19 @@ def calculate_differentials(model, freeVariables):
 <span>class <span class="ident">ControlledHeatEquation2D</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class for defining boundary value problems.</p></div>
+<div class="desc"><p>Class defining the 2D heat equation as a temporal boundary value problem. (EXPERIMENTAL)</p>
+<p>(t, x, y) |-&gt; z</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class ControlledHeatEquation2D(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the 2D heat equation as a temporal boundary value problem. (EXPERIMENTAL)
+
+    (t, x, y) |-&gt; z
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         return [
@@ -1106,12 +1277,19 @@ def calculate_differentials(model, freeVariables):
 <span>class <span class="ident">DAE</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class for defining boundary value problems.</p></div>
+<div class="desc"><p>Class defining the differential algebraic equation for a pendulum.</p>
+<p>t |-&gt; (x_1, x_2, lambda)</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class DAE(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the differential algebraic equation for a pendulum.
+
+    t |-&gt; (x_1, x_2, lambda)
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         def initPos(t):
@@ -1194,12 +1372,19 @@ def calculate_differentials(model, freeVariables):
 <span>class <span class="ident">FluidEquation2D</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class for defining boundary value problems.</p></div>
+<div class="desc"><p>Class defining the fluid equation as a boundary value problem. (EXPERIMENTAL)</p>
+<p>(t, x, y) |-&gt; (v_x, v_y)</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class FluidEquation2D(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the fluid equation as a boundary value problem. (EXPERIMENTAL)
+
+    (t, x, y) |-&gt; (v_x, v_y)
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         def field(x, y):
@@ -1287,12 +1472,19 @@ def calculate_differentials(model, freeVariables):
 <span>class <span class="ident">HeatEquation2D</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class for defining boundary value problems.</p></div>
+<div class="desc"><p>Class defining the 2D heat equation as a boundary value problem.</p>
+<p>(t, x, y) |-&gt; z</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class HeatEquation2D(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the 2D heat equation as a boundary value problem.
+
+    (t, x, y) |-&gt; z
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         return [
@@ -1350,12 +1542,19 @@ def calculate_differentials(model, freeVariables):
 <span>class <span class="ident">MinimalSurfaceEquation</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class for defining boundary value problems.</p></div>
+<div class="desc"><p>Class defining the minimal surface equation as a boundary value problem.</p>
+<p>(x, y) |-&gt; z</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class MinimalSurfaceEquation(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the minimal surface equation as a boundary value problem.
+
+    (x, y) |-&gt; z
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         return [
@@ -1417,12 +1616,19 @@ def calculate_differentials(model, freeVariables):
 <span>class <span class="ident">ReactionDiffusionEquation</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class for defining boundary value problems.</p></div>
+<div class="desc"><p>Class defining the Reaction-Diffusion equation as a boundary value problem.</p>
+<p>(t, x) |-&gt; y</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class ReactionDiffusionEquation(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the Reaction-Diffusion equation as a boundary value problem.
+
+    (t, x) |-&gt; y
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         return [
@@ -1481,12 +1687,19 @@ def calculate_differentials(model, freeVariables):
 <span>class <span class="ident">VanDerPolEquation</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class for defining boundary value problems.</p></div>
+<div class="desc"><p>Class defining the Van-der-Pol equation as a boundary value problem.</p>
+<p>(t, x) |-&gt; y</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class VanDerPolEquation(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the Van-der-Pol equation as a boundary value problem.
+
+    (t, x) |-&gt; y
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         return [
@@ -1546,12 +1759,18 @@ def calculate_differentials(model, freeVariables):
 <span>class <span class="ident">VectorTest</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class for defining boundary value problems.</p></div>
+<div class="desc"><p>Class defining a equation for reconstructing a gradient field. (EXPERIMENTAL)</p>
+<p>(t, x, y) |-&gt; (v_x, v_y)</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class VectorTest(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining a equation for reconstructing a gradient field. (EXPERIMENTAL)
+
+    (t, x, y) |-&gt; (v_x, v_y)
+    &#34;&#34;&#34;
     @classproperty
     def conditions(cls):
         def field(x, y):
@@ -1620,12 +1839,19 @@ def calculate_differentials(model, freeVariables):
 <span>class <span class="ident">WaveEquation1D</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class for defining boundary value problems.</p></div>
+<div class="desc"><p>Class defining the 1D wave equation as a boundary value problem.</p>
+<p>(t, x) |-&gt; y</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class WaveEquation1D(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the 1D wave equation as a boundary value problem.
+
+    (t, x) |-&gt; y
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         return [
@@ -1687,12 +1913,19 @@ def calculate_differentials(model, freeVariables):
 <span>class <span class="ident">WaveEquation2D</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class for defining boundary value problems.</p></div>
+<div class="desc"><p>Class defining the 2D wave equation as a boundary value problem.</p>
+<p>(t, x, y) |-&gt; z</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class WaveEquation2D(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the 2D wave equation as a boundary value problem.
+
+    (t, x, y) |-&gt; z
+    &#34;&#34;&#34;
+
     @classproperty
     def conditions(cls):
         return [

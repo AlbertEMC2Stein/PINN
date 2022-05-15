@@ -10,11 +10,18 @@ class Solver:
         """
         Constructor for the Solver class.
 
-        :param bvp: The boundary value problem to be solved
-        :param num_inputs: The number of inputs to the neural network
-        :param num_outputs: The number of outputs from the neural network
-        :param num_hidden_layers: The number of hidden layers in the neural network
-        :param num_neurons_per_layer: The number of neurons in each hidden layer
+        Parameters
+        -----------
+        bvp: BoundaryValueProblem
+            Boundary value problem to be solved
+        num_inputs: int
+            Number of inputs to the neural network
+        num_outputs: int
+            Number of outputs from the neural network
+        num_hidden_layers: int
+            Number of hidden layers in the neural network
+        num_neurons_per_layer:  int
+            Number of neurons in each hidden layer
         """
 
         model = tf.keras.Sequential()
@@ -35,9 +42,14 @@ class Solver:
         """
         Trains the neural network to solve the boundary value problem.
 
-        :param optimizer: The optimizer to use for training
-        :param lr_scheduler: The learning rate scheduler to use for training
-        :param iterations: The number of iterations to train for
+        Parameters
+        -----------
+        optimizer: optimizer
+            Optimizer to use for training
+        lr_scheduler: lr_scheduler
+            Learning rate scheduler to use for training
+        iterations: int
+            Number of iterations to train for
         """
 
         def compute_loss():
@@ -82,6 +94,3 @@ class Solver:
                 print('\rIt {:05d}: loss = {:10.8e} lr = {:.5f}'.format(i, loss, lr_scheduler(i)), end="")
 
         print('\nComputation time: {:.1f} seconds'.format(time() - t0))
-
-
-

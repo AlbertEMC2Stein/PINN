@@ -39,11 +39,18 @@ class Solver:
         &#34;&#34;&#34;
         Constructor for the Solver class.
 
-        :param bvp: The boundary value problem to be solved
-        :param num_inputs: The number of inputs to the neural network
-        :param num_outputs: The number of outputs from the neural network
-        :param num_hidden_layers: The number of hidden layers in the neural network
-        :param num_neurons_per_layer: The number of neurons in each hidden layer
+        Parameters
+        -----------
+        bvp: BoundaryValueProblem
+            Boundary value problem to be solved
+        num_inputs: int
+            Number of inputs to the neural network
+        num_outputs: int
+            Number of outputs from the neural network
+        num_hidden_layers: int
+            Number of hidden layers in the neural network
+        num_neurons_per_layer:  int
+            Number of neurons in each hidden layer
         &#34;&#34;&#34;
 
         model = tf.keras.Sequential()
@@ -64,9 +71,14 @@ class Solver:
         &#34;&#34;&#34;
         Trains the neural network to solve the boundary value problem.
 
-        :param optimizer: The optimizer to use for training
-        :param lr_scheduler: The learning rate scheduler to use for training
-        :param iterations: The number of iterations to train for
+        Parameters
+        -----------
+        optimizer: optimizer
+            Optimizer to use for training
+        lr_scheduler: lr_scheduler
+            Learning rate scheduler to use for training
+        iterations: int
+            Number of iterations to train for
         &#34;&#34;&#34;
 
         def compute_loss():
@@ -128,11 +140,19 @@ class Solver:
 </code></dt>
 <dd>
 <div class="desc"><p>Constructor for the Solver class.</p>
-<p>:param bvp: The boundary value problem to be solved
-:param num_inputs: The number of inputs to the neural network
-:param num_outputs: The number of outputs from the neural network
-:param num_hidden_layers: The number of hidden layers in the neural network
-:param num_neurons_per_layer: The number of neurons in each hidden layer</p></div>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>bvp</code></strong> :&ensp;<code>BoundaryValueProblem</code></dt>
+<dd>Boundary value problem to be solved</dd>
+<dt><strong><code>num_inputs</code></strong> :&ensp;<code>int</code></dt>
+<dd>Number of inputs to the neural network</dd>
+<dt><strong><code>num_outputs</code></strong> :&ensp;<code>int</code></dt>
+<dd>Number of outputs from the neural network</dd>
+<dt><strong><code>num_hidden_layers</code></strong> :&ensp;<code>int</code></dt>
+<dd>Number of hidden layers in the neural network</dd>
+<dt><strong><code>num_neurons_per_layer</code></strong> :&ensp;<code> int</code></dt>
+<dd>Number of neurons in each hidden layer</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -142,11 +162,18 @@ class Solver:
         &#34;&#34;&#34;
         Constructor for the Solver class.
 
-        :param bvp: The boundary value problem to be solved
-        :param num_inputs: The number of inputs to the neural network
-        :param num_outputs: The number of outputs from the neural network
-        :param num_hidden_layers: The number of hidden layers in the neural network
-        :param num_neurons_per_layer: The number of neurons in each hidden layer
+        Parameters
+        -----------
+        bvp: BoundaryValueProblem
+            Boundary value problem to be solved
+        num_inputs: int
+            Number of inputs to the neural network
+        num_outputs: int
+            Number of outputs from the neural network
+        num_hidden_layers: int
+            Number of hidden layers in the neural network
+        num_neurons_per_layer:  int
+            Number of neurons in each hidden layer
         &#34;&#34;&#34;
 
         model = tf.keras.Sequential()
@@ -167,9 +194,14 @@ class Solver:
         &#34;&#34;&#34;
         Trains the neural network to solve the boundary value problem.
 
-        :param optimizer: The optimizer to use for training
-        :param lr_scheduler: The learning rate scheduler to use for training
-        :param iterations: The number of iterations to train for
+        Parameters
+        -----------
+        optimizer: optimizer
+            Optimizer to use for training
+        lr_scheduler: lr_scheduler
+            Learning rate scheduler to use for training
+        iterations: int
+            Number of iterations to train for
         &#34;&#34;&#34;
 
         def compute_loss():
@@ -222,9 +254,15 @@ class Solver:
 </code></dt>
 <dd>
 <div class="desc"><p>Trains the neural network to solve the boundary value problem.</p>
-<p>:param optimizer: The optimizer to use for training
-:param lr_scheduler: The learning rate scheduler to use for training
-:param iterations: The number of iterations to train for</p></div>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>optimizer</code></strong> :&ensp;<code>optimizer</code></dt>
+<dd>Optimizer to use for training</dd>
+<dt><strong><code>lr_scheduler</code></strong> :&ensp;<code>lr_scheduler</code></dt>
+<dd>Learning rate scheduler to use for training</dd>
+<dt><strong><code>iterations</code></strong> :&ensp;<code>int</code></dt>
+<dd>Number of iterations to train for</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -233,9 +271,14 @@ class Solver:
     &#34;&#34;&#34;
     Trains the neural network to solve the boundary value problem.
 
-    :param optimizer: The optimizer to use for training
-    :param lr_scheduler: The learning rate scheduler to use for training
-    :param iterations: The number of iterations to train for
+    Parameters
+    -----------
+    optimizer: optimizer
+        Optimizer to use for training
+    lr_scheduler: lr_scheduler
+        Learning rate scheduler to use for training
+    iterations: int
+        Number of iterations to train for
     &#34;&#34;&#34;
 
     def compute_loss():
