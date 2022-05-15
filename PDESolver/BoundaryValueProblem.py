@@ -42,12 +42,28 @@ class Condition:
 
 
 class BoundaryValueProblem:
+    """
+    Class for defining boundary value problems.
+    """
+
     @classproperty
     def conditions(cls):
+        """
+        Returns the conditions of the boundary value problem.
+        :return: List of conditions
+        """
+
         return []
 
     @staticmethod
     def calculate_differentials(model, freeVariables):
+        """
+        Calculates the differentials of the model at the given points.
+
+        :param model: Model to calculate the differentials of
+        :param freeVariables: Tensor of points to calculate the differentials at
+        :return: Tensor of differentials
+        """
         ...
 
 
