@@ -23,6 +23,12 @@ def _plot_loss(solver):
 
 
 def plot_1D(solver):
+    """
+    Plots the solution of a BVP defined in one spacial dimension and one output.
+
+    :param solver: Solver object
+    """
+
     def plot_sample_points():
         fig = plt.figure(figsize=(9, 6))
 
@@ -113,6 +119,12 @@ def plot_1D(solver):
 
 
 def plot_2D(solver):
+    """
+    Plots the solution of a BVP defined in two spacial dimensions and one output.
+
+    :param solver: Solver object
+    """
+
     def animate_solution():
         fig = plt.figure()
         ax = fig.add_subplot(projection='3d')
@@ -151,6 +163,11 @@ def plot_2D(solver):
 
 
 def plot_2Dvectorfield(solver):
+    """
+    Plots the solution of a BVP defined in two spacial dimensions and two outputs.
+    :param solver: Solver object
+    """
+
     def animate_solution():
         fig = plt.figure()
         ax = fig.add_subplot()
@@ -194,6 +211,12 @@ def plot_2Dvectorfield(solver):
 
 
 def plot_phaseplot(solver):
+    """
+    Plots the solution of a DAE defined in one temporal dimension and two spacial outputs.
+    :param solver: Solver object
+    :return:
+    """
+
     def animate_solution():
         fig, ax = plt.subplots()
 

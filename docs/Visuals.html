@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+<meta name="generator" content="pdoc 0.10.0" />
+<title>PDESolver.Visuals API documentation</title>
+<meta name="description" content="" />
+<link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
+<link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
+<link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
+<style>:root{--highlight-color:#fe9}.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}#sidebar > *:last-child{margin-bottom:2cm}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}h1:target,h2:target,h3:target,h4:target,h5:target,h6:target{background:var(--highlight-color);padding:.2em 0}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{margin-top:.6em;font-weight:bold}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}dt:target .name{background:var(--highlight-color)}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary,.git-link-div{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase}.source summary > *{white-space:nowrap;cursor:pointer}.git-link{color:inherit;margin-left:1em}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}td{padding:0 .5em}.admonition{padding:.1em .5em;margin-bottom:1em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%;height:100vh;overflow:auto;position:sticky;top:0}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
+<style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
+<script async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/latest.js?config=TeX-AMS_CHTML" integrity="sha256-kZafAc6mZvK3W3v1pHOcUix30OHQN6pU/NO2oFkqZVw=" crossorigin></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/highlight.min.js" integrity="sha256-Uv3H6lx7dJmRfRvH8TH6kJD1TSK1aFcwgx+mdg3epi8=" crossorigin></script>
+<script>window.addEventListener('DOMContentLoaded', () => hljs.initHighlighting())</script>
+</head>
+<body>
+<main>
+<article id="content">
+<header>
+<h1 class="title">Module <code>PDESolver.Visuals</code></h1>
+</header>
+<section id="section-intro">
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">import os
+import tensorflow as tf
+import numpy as np
+import matplotlib
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+
+matplotlib.use(&#39;macosx&#39;)
+
+
+def _outFolderExists():
+    if not os.path.isdir(&#39;../out/&#39;):
+        os.mkdir(&#39;../out/&#39;)
+
+
+def _plot_loss(solver):
+    fig = plt.figure(figsize=(9, 6))
+    ax = fig.add_subplot(111)
+    ax.semilogy(range(len(solver.loss_history)), solver.loss_history, &#39;k-&#39;)
+    ax.set_xlabel(&#39;$n_{epoch}$&#39;)
+    ax.set_ylabel(&#39;$\\phi_{n_{epoch}}$&#39;)
+    plt.show()
+
+
+def plot_1D(solver):
+    &#34;&#34;&#34;
+    Plots the solution of a BVP defined in one spacial dimension and one output.
+
+    :param solver: Solver object
+    &#34;&#34;&#34;
+
+    def plot_sample_points():
+        fig = plt.figure(figsize=(9, 6))
+
+        for cond in solver.bvp.conditions:
+            t, x = cond.sample_points()[:, 0], cond.sample_points()[:, 1]
+
+            if cond.name != &#39;inner&#39;:
+                plt.scatter(t, x, c=&#39;black&#39;, marker=&#39;X&#39;)
+            else:
+                plt.scatter(t, x, c=&#39;r&#39;, marker=&#39;.&#39;, alpha=0.1)
+
+        plt.xlabel(&#39;$t$&#39;)
+        plt.ylabel(&#39;$x$&#39;)
+
+        plt.title(&#39;Positions of collocation points and boundary data&#39;)
+        # plt.savefig(&#39;Xdata_Burgers.pdf&#39;, bbox_inches=&#39;tight&#39;, dpi=300)
+        plt.show()
+
+    def plot_u():
+        # Set up meshgrid
+        N = 1000
+        tspace = np.linspace(bounds[0][0], bounds[1][0], N + 1)
+        xspace = np.linspace(bounds[0][1], bounds[1][1], N + 1)
+        T, X = np.meshgrid(tspace, xspace)
+        Xgrid = np.vstack([T.flatten(), X.flatten()]).T
+
+        # Determine predictions of u(t, x)
+        upred = solver.model(tf.cast(Xgrid, &#39;float32&#39;))[:, 0]
+        minu, maxu = np.min(upred), np.max(upred)
+
+        # Reshape upred
+        U = upred.numpy().reshape(N + 1, N + 1)
+
+        # Surface plot of solution u(t,x)
+        fig = plt.figure(figsize=(9, 6))
+        ax = fig.add_subplot(111, projection=&#39;3d&#39;)
+        ax.plot_surface(T, X, U, cmap=&#39;viridis&#39;)
+        ax.view_init(35, 35)
+        ax.set_xlabel(&#39;$t$&#39;)
+        ax.set_ylabel(&#39;$x$&#39;)
+        ax.set_zlabel(&#39;$u_\\theta(t,x)$&#39;)
+        ax.set_title(&#39;Solution of equation&#39;)
+
+        fig = plt.figure(figsize=(9, 6))
+        plt.imshow(U, cmap=&#39;viridis&#39;)
+        ax.set_xlabel(&#39;$t$&#39;)
+        ax.set_ylabel(&#39;$x$&#39;)
+        ax.set_title(&#39;Solution of equation&#39;)
+
+        plt.savefig(&#39;out/%s_solution.pdf&#39; % solver.bvp.__name__, bbox_inches=&#39;tight&#39;, dpi=300);
+        plt.show()
+
+        return minu, maxu
+
+    def animate_solution():
+        fig, ax = plt.subplots()
+        xdata, ydata = tf.linspace(bounds[0][1], bounds[1][1], 1000), []
+        ln, = plt.plot([], [], color=&#39;b&#39;)
+        title = ax.text(0, maxu * 0.9, &#34;&#34;, ha=&#39;center&#39;)
+
+        def init():
+            ax.set_xlim(bounds[0][1], bounds[1][1])
+            ax.set_ylim(minu, maxu)
+
+            return ln,
+
+        def update(frame):
+            ydata = solver.model(tf.transpose(tf.stack([tf.ones_like(xdata) * frame, xdata])))[:, 0]
+            ln.set_data(xdata, ydata)
+            title.set_text(u&#34;t = {:.3f}&#34;.format(frame))
+
+            return ln, title
+
+        anim = FuncAnimation(fig, update, frames=np.linspace(bounds[0][0], bounds[1][0], 300),
+                            interval=16, init_func=init, blit=True)
+
+        anim.save(&#34;out/%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
+        plt.show()
+
+    inner = [cond for cond in solver.bvp.conditions if cond.name == &#34;inner&#34;][0]
+    bounds = inner.get_region_bounds()
+
+    _outFolderExists()
+    plot_sample_points()
+    _plot_loss(solver)
+    minu, maxu = plot_u()
+    animate_solution()
+
+
+def plot_2D(solver):
+    &#34;&#34;&#34;
+    Plots the solution of a BVP defined in two spacial dimensions and one output.
+
+    :param solver: Solver object
+    &#34;&#34;&#34;
+
+    def animate_solution():
+        fig = plt.figure()
+        ax = fig.add_subplot(projection=&#39;3d&#39;)
+
+        N = 100
+        xspace = np.linspace(0, 1, N)
+        yspace = np.linspace(0, 1, N)
+        X, Y = np.meshgrid(xspace, yspace)
+        XYgrid = np.vstack([X.flatten(), Y.flatten()]).T
+        XYgrid = tf.cast(XYgrid, &#39;float32&#39;)
+
+        plot = ax.plot_surface(X, Y, 0 * X, cmap=&#39;viridis&#39;)
+
+        def data_gen(frame):
+            x, y = XYgrid[:, 0], XYgrid[:, 1]
+            z = solver.model(tf.transpose(tf.stack([tf.ones_like(x) * frame, x, y])))
+            Z = tf.reshape(z, X.shape)
+
+            ax.clear()
+            plot = ax.plot_surface(X, Y, Z, cmap=&#39;viridis&#39;)
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.set_zlim(-0.1, 1)
+
+            title = ax.set_title(&#34;t = %.2f&#34; % frame, ha=&#39;center&#39;)
+            return plot, title
+
+        anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 120),
+                             interval=16, blit=False)
+
+        anim.save(&#34;out/%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
+        plt.show()
+
+    _plot_loss(solver)
+    animate_solution()
+
+
+def plot_2Dvectorfield(solver):
+    &#34;&#34;&#34;
+    Plots the solution of a BVP defined in two spacial dimensions and two outputs.
+    :param solver: Solver object
+    &#34;&#34;&#34;
+
+    def animate_solution():
+        fig = plt.figure()
+        ax = fig.add_subplot()
+
+        N = 30
+        xspace = np.linspace(-2, 2, N)
+        yspace = np.linspace(-2, 2, N)
+        X, Y = np.meshgrid(xspace, yspace)
+        XYgrid = np.vstack([X.flatten(), Y.flatten()]).T
+        XYgrid = tf.cast(XYgrid, &#39;float32&#39;)
+
+        x, y = XYgrid[:, 0], XYgrid[:, 1]
+        z = solver.model(tf.transpose(tf.stack([tf.zeros_like(x), x, y])))
+        Zx = tf.reshape(z[:, 0], X.shape)
+        Zy = tf.reshape(z[:, 1], X.shape)
+        plot = ax.quiver(X, Y, Zx, Zy, scale=1.0)
+
+        def data_gen(frame):
+            x, y = XYgrid[:, 0], XYgrid[:, 1]
+            z = solver.model(tf.transpose(tf.stack([tf.ones_like(x) * frame, x, y])))
+            Zx = tf.reshape(z[:, 0], X.shape)
+            Zy = tf.reshape(z[:, 1], X.shape)
+
+            ax.clear()
+            plot = ax.quiver(X, Y, Zx, Zy, scale=1.0)
+            ax.set_xlim(-2, 2)
+            ax.set_ylim(-2, 2)
+
+            title = ax.set_title(&#34;t = %.2f&#34; % frame, ha=&#39;center&#39;)
+            return plot, title
+
+        anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 240),
+                             interval=16, blit=False)
+
+        anim.save(&#34;out/%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
+        plt.show()
+
+    _outFolderExists()
+    _plot_loss()
+    animate_solution()
+
+
+def plot_phaseplot(solver):
+    &#34;&#34;&#34;
+    Plots the solution of a DAE defined in one temporal dimension and two spacial outputs.
+    :param solver: Solver object
+    :return:
+    &#34;&#34;&#34;
+
+    def animate_solution():
+        fig, ax = plt.subplots()
+
+        tspace = tf.linspace([0], [10], 600, axis=0)
+        xy = solver.model(tspace)
+        xd, yd = xy[:, 0].numpy(), xy[:, 1].numpy()
+        pendulum, = plt.plot([], [], &#39;lightgray&#39;)
+        ln, = plt.plot([], [], &#39;cornflowerblue&#39;)
+        sc, = plt.plot([], [], &#39;bo&#39;, markersize=10)
+
+        def init():
+            ax.set_xlim(-1.25, 1.25)
+            ax.set_ylim(-1.25, 0.25)
+            return ln, sc, pendulum
+
+        def update(frame):
+            trail = 20
+            start = max(frame - trail, 0)
+            pendulum.set_data([0, xd[frame]], [0, yd[frame]])
+            ln.set_data(xd[start:frame+1], yd[start:frame+1])
+            sc.set_data(xd[frame], yd[frame])
+            plt.title(&#34;t = %.2f&#34; % frame)
+            return ln, sc, pendulum
+
+        anim = FuncAnimation(fig, update, frames=np.arange(len(tspace)),
+                            init_func=init, blit=False, interval=16)
+
+        anim.save(&#34;out/%s_solution.gif&#34; % solver.bvp.__name__, fps=60)
+        plt.show()
+
+    _outFolderExists()
+    _plot_loss()
+    animate_solution()</code></pre>
+</details>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-functions">Functions</h2>
+<dl>
+<dt id="PDESolver.Visuals.plot_1D"><code class="name flex">
+<span>def <span class="ident">plot_1D</span></span>(<span>solver)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Plots the solution of a BVP defined in one spacial dimension and one output.</p>
+<p>:param solver: Solver object</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def plot_1D(solver):
+    &#34;&#34;&#34;
+    Plots the solution of a BVP defined in one spacial dimension and one output.
+
+    :param solver: Solver object
+    &#34;&#34;&#34;
+
+    def plot_sample_points():
+        fig = plt.figure(figsize=(9, 6))
+
+        for cond in solver.bvp.conditions:
+            t, x = cond.sample_points()[:, 0], cond.sample_points()[:, 1]
+
+            if cond.name != &#39;inner&#39;:
+                plt.scatter(t, x, c=&#39;black&#39;, marker=&#39;X&#39;)
+            else:
+                plt.scatter(t, x, c=&#39;r&#39;, marker=&#39;.&#39;, alpha=0.1)
+
+        plt.xlabel(&#39;$t$&#39;)
+        plt.ylabel(&#39;$x$&#39;)
+
+        plt.title(&#39;Positions of collocation points and boundary data&#39;)
+        # plt.savefig(&#39;Xdata_Burgers.pdf&#39;, bbox_inches=&#39;tight&#39;, dpi=300)
+        plt.show()
+
+    def plot_u():
+        # Set up meshgrid
+        N = 1000
+        tspace = np.linspace(bounds[0][0], bounds[1][0], N + 1)
+        xspace = np.linspace(bounds[0][1], bounds[1][1], N + 1)
+        T, X = np.meshgrid(tspace, xspace)
+        Xgrid = np.vstack([T.flatten(), X.flatten()]).T
+
+        # Determine predictions of u(t, x)
+        upred = solver.model(tf.cast(Xgrid, &#39;float32&#39;))[:, 0]
+        minu, maxu = np.min(upred), np.max(upred)
+
+        # Reshape upred
+        U = upred.numpy().reshape(N + 1, N + 1)
+
+        # Surface plot of solution u(t,x)
+        fig = plt.figure(figsize=(9, 6))
+        ax = fig.add_subplot(111, projection=&#39;3d&#39;)
+        ax.plot_surface(T, X, U, cmap=&#39;viridis&#39;)
+        ax.view_init(35, 35)
+        ax.set_xlabel(&#39;$t$&#39;)
+        ax.set_ylabel(&#39;$x$&#39;)
+        ax.set_zlabel(&#39;$u_\\theta(t,x)$&#39;)
+        ax.set_title(&#39;Solution of equation&#39;)
+
+        fig = plt.figure(figsize=(9, 6))
+        plt.imshow(U, cmap=&#39;viridis&#39;)
+        ax.set_xlabel(&#39;$t$&#39;)
+        ax.set_ylabel(&#39;$x$&#39;)
+        ax.set_title(&#39;Solution of equation&#39;)
+
+        plt.savefig(&#39;out/%s_solution.pdf&#39; % solver.bvp.__name__, bbox_inches=&#39;tight&#39;, dpi=300);
+        plt.show()
+
+        return minu, maxu
+
+    def animate_solution():
+        fig, ax = plt.subplots()
+        xdata, ydata = tf.linspace(bounds[0][1], bounds[1][1], 1000), []
+        ln, = plt.plot([], [], color=&#39;b&#39;)
+        title = ax.text(0, maxu * 0.9, &#34;&#34;, ha=&#39;center&#39;)
+
+        def init():
+            ax.set_xlim(bounds[0][1], bounds[1][1])
+            ax.set_ylim(minu, maxu)
+
+            return ln,
+
+        def update(frame):
+            ydata = solver.model(tf.transpose(tf.stack([tf.ones_like(xdata) * frame, xdata])))[:, 0]
+            ln.set_data(xdata, ydata)
+            title.set_text(u&#34;t = {:.3f}&#34;.format(frame))
+
+            return ln, title
+
+        anim = FuncAnimation(fig, update, frames=np.linspace(bounds[0][0], bounds[1][0], 300),
+                            interval=16, init_func=init, blit=True)
+
+        anim.save(&#34;out/%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
+        plt.show()
+
+    inner = [cond for cond in solver.bvp.conditions if cond.name == &#34;inner&#34;][0]
+    bounds = inner.get_region_bounds()
+
+    _outFolderExists()
+    plot_sample_points()
+    _plot_loss(solver)
+    minu, maxu = plot_u()
+    animate_solution()</code></pre>
+</details>
+</dd>
+<dt id="PDESolver.Visuals.plot_2D"><code class="name flex">
+<span>def <span class="ident">plot_2D</span></span>(<span>solver)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Plots the solution of a BVP defined in two spacial dimensions and one output.</p>
+<p>:param solver: Solver object</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def plot_2D(solver):
+    &#34;&#34;&#34;
+    Plots the solution of a BVP defined in two spacial dimensions and one output.
+
+    :param solver: Solver object
+    &#34;&#34;&#34;
+
+    def animate_solution():
+        fig = plt.figure()
+        ax = fig.add_subplot(projection=&#39;3d&#39;)
+
+        N = 100
+        xspace = np.linspace(0, 1, N)
+        yspace = np.linspace(0, 1, N)
+        X, Y = np.meshgrid(xspace, yspace)
+        XYgrid = np.vstack([X.flatten(), Y.flatten()]).T
+        XYgrid = tf.cast(XYgrid, &#39;float32&#39;)
+
+        plot = ax.plot_surface(X, Y, 0 * X, cmap=&#39;viridis&#39;)
+
+        def data_gen(frame):
+            x, y = XYgrid[:, 0], XYgrid[:, 1]
+            z = solver.model(tf.transpose(tf.stack([tf.ones_like(x) * frame, x, y])))
+            Z = tf.reshape(z, X.shape)
+
+            ax.clear()
+            plot = ax.plot_surface(X, Y, Z, cmap=&#39;viridis&#39;)
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.set_zlim(-0.1, 1)
+
+            title = ax.set_title(&#34;t = %.2f&#34; % frame, ha=&#39;center&#39;)
+            return plot, title
+
+        anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 120),
+                             interval=16, blit=False)
+
+        anim.save(&#34;out/%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
+        plt.show()
+
+    _plot_loss(solver)
+    animate_solution()</code></pre>
+</details>
+</dd>
+<dt id="PDESolver.Visuals.plot_2Dvectorfield"><code class="name flex">
+<span>def <span class="ident">plot_2Dvectorfield</span></span>(<span>solver)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Plots the solution of a BVP defined in two spacial dimensions and two outputs.
+:param solver: Solver object</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def plot_2Dvectorfield(solver):
+    &#34;&#34;&#34;
+    Plots the solution of a BVP defined in two spacial dimensions and two outputs.
+    :param solver: Solver object
+    &#34;&#34;&#34;
+
+    def animate_solution():
+        fig = plt.figure()
+        ax = fig.add_subplot()
+
+        N = 30
+        xspace = np.linspace(-2, 2, N)
+        yspace = np.linspace(-2, 2, N)
+        X, Y = np.meshgrid(xspace, yspace)
+        XYgrid = np.vstack([X.flatten(), Y.flatten()]).T
+        XYgrid = tf.cast(XYgrid, &#39;float32&#39;)
+
+        x, y = XYgrid[:, 0], XYgrid[:, 1]
+        z = solver.model(tf.transpose(tf.stack([tf.zeros_like(x), x, y])))
+        Zx = tf.reshape(z[:, 0], X.shape)
+        Zy = tf.reshape(z[:, 1], X.shape)
+        plot = ax.quiver(X, Y, Zx, Zy, scale=1.0)
+
+        def data_gen(frame):
+            x, y = XYgrid[:, 0], XYgrid[:, 1]
+            z = solver.model(tf.transpose(tf.stack([tf.ones_like(x) * frame, x, y])))
+            Zx = tf.reshape(z[:, 0], X.shape)
+            Zy = tf.reshape(z[:, 1], X.shape)
+
+            ax.clear()
+            plot = ax.quiver(X, Y, Zx, Zy, scale=1.0)
+            ax.set_xlim(-2, 2)
+            ax.set_ylim(-2, 2)
+
+            title = ax.set_title(&#34;t = %.2f&#34; % frame, ha=&#39;center&#39;)
+            return plot, title
+
+        anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 240),
+                             interval=16, blit=False)
+
+        anim.save(&#34;out/%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
+        plt.show()
+
+    _outFolderExists()
+    _plot_loss()
+    animate_solution()</code></pre>
+</details>
+</dd>
+<dt id="PDESolver.Visuals.plot_phaseplot"><code class="name flex">
+<span>def <span class="ident">plot_phaseplot</span></span>(<span>solver)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Plots the solution of a DAE defined in one temporal dimension and two spacial outputs.
+:param solver: Solver object
+:return:</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def plot_phaseplot(solver):
+    &#34;&#34;&#34;
+    Plots the solution of a DAE defined in one temporal dimension and two spacial outputs.
+    :param solver: Solver object
+    :return:
+    &#34;&#34;&#34;
+
+    def animate_solution():
+        fig, ax = plt.subplots()
+
+        tspace = tf.linspace([0], [10], 600, axis=0)
+        xy = solver.model(tspace)
+        xd, yd = xy[:, 0].numpy(), xy[:, 1].numpy()
+        pendulum, = plt.plot([], [], &#39;lightgray&#39;)
+        ln, = plt.plot([], [], &#39;cornflowerblue&#39;)
+        sc, = plt.plot([], [], &#39;bo&#39;, markersize=10)
+
+        def init():
+            ax.set_xlim(-1.25, 1.25)
+            ax.set_ylim(-1.25, 0.25)
+            return ln, sc, pendulum
+
+        def update(frame):
+            trail = 20
+            start = max(frame - trail, 0)
+            pendulum.set_data([0, xd[frame]], [0, yd[frame]])
+            ln.set_data(xd[start:frame+1], yd[start:frame+1])
+            sc.set_data(xd[frame], yd[frame])
+            plt.title(&#34;t = %.2f&#34; % frame)
+            return ln, sc, pendulum
+
+        anim = FuncAnimation(fig, update, frames=np.arange(len(tspace)),
+                            init_func=init, blit=False, interval=16)
+
+        anim.save(&#34;out/%s_solution.gif&#34; % solver.bvp.__name__, fps=60)
+        plt.show()
+
+    _outFolderExists()
+    _plot_loss()
+    animate_solution()</code></pre>
+</details>
+</dd>
+</dl>
+</section>
+<section>
+</section>
+</article>
+<nav id="sidebar">
+<h1>Index</h1>
+<div class="toc">
+<ul></ul>
+</div>
+<ul id="index">
+<li><h3>Super-module</h3>
+<ul>
+<li><code><a title="PDESolver" href="index.html">PDESolver</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-functions">Functions</a></h3>
+<ul class="">
+<li><code><a title="PDESolver.Visuals.plot_1D" href="#PDESolver.Visuals.plot_1D">plot_1D</a></code></li>
+<li><code><a title="PDESolver.Visuals.plot_2D" href="#PDESolver.Visuals.plot_2D">plot_2D</a></code></li>
+<li><code><a title="PDESolver.Visuals.plot_2Dvectorfield" href="#PDESolver.Visuals.plot_2Dvectorfield">plot_2Dvectorfield</a></code></li>
+<li><code><a title="PDESolver.Visuals.plot_phaseplot" href="#PDESolver.Visuals.plot_phaseplot">plot_phaseplot</a></code></li>
+</ul>
+</li>
+</ul>
+</nav>
+</main>
+<footer id="footer">
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+</footer>
+</body>
+</html>
