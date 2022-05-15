@@ -7,6 +7,16 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 class Solver:
     def __init__(self, bvp, num_inputs=2, num_outputs=1, num_hidden_layers=6, num_neurons_per_layer=16):
+        """
+        Constructor for the Solver class.
+
+        :param bvp: The boundary value problem to be solved
+        :param num_inputs: The number of inputs to the neural network
+        :param num_outputs: The number of outputs from the neural network
+        :param num_hidden_layers: The number of hidden layers in the neural network
+        :param num_neurons_per_layer: The number of neurons in each hidden layer
+        """
+
         model = tf.keras.Sequential()
         model.add(tf.keras.Input(num_inputs))
 
@@ -22,6 +32,14 @@ class Solver:
         self.loss_history = []
 
     def train(self, optimizer, lr_scheduler, iterations=10000):
+        """
+        Trains the neural network to solve the boundary value problem.
+
+        :param optimizer: The optimizer to use for training
+        :param lr_scheduler: The learning rate scheduler to use for training
+        :param iterations: The number of iterations to train for
+        """
+
         def compute_loss():
             criterion = tf.keras.losses.Huber()
 
