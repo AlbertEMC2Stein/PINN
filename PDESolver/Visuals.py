@@ -9,8 +9,8 @@ matplotlib.use('macosx')
 
 
 def _outFolderExists():
-    if not os.path.isdir('../out/'):
-        os.mkdir('../out/')
+    if not os.path.isdir('out/'):
+        os.mkdir('out/')
 
 
 def _plot_loss(solver):
