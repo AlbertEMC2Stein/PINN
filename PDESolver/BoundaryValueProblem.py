@@ -10,7 +10,7 @@ class classproperty(object):
 
 
 class Condition:
-    def __init__(self, name, residue_fn, region_samples_pair, sampler=Random(), weight=1):
+    def __init__(self, name, residue_fn, region_samples_pair, sampler=Equidistant(), weight=1):
         """
         Class for defining conditions for boundary value problems.
 
@@ -227,23 +227,24 @@ class ControlledHeatEquation1D(BoundaryValueProblem):
         return [
             Condition("initial",
                       lambda Du: Du["u"],
-                      (Cuboid([0, 0], [0, 1]), 100)),
+                      (Cuboid([0, 0], [0, 1]), 200)),
             Condition("control",
-                      lambda Du: Du["u"] - Du["uR"],
-                      (Cuboid([0, 1], [1, 1]), 100)),
+                      lambda Du: Du["u"], #- Du["uR"],
+                      (Cuboid([0, 1], [1, 1]), 200)),
             Condition("goal",
-                      lambda Du: Du["u"] - (1 - tf.cos(np.pi * Du["x"])) / 2,
-                      (Cuboid([1, 0], [1, 1]), 100)),
-            Condition("boundary",
-                      lambda Du: Du["u_x"],
-                      (Union(Cuboid([0, 0], [1, 0]), Cuboid([0, 1], [1, 1])), 200)),
+                      lambda Du: Du["u"] - tf.exp(-10 * (1 - Du["x"])**2),
+                      (Cuboid([1, 0], [1, 1]), 200)),
+            # Condition("boundary",
+            #           lambda Du: Du["u_x"],
+            #           (Cuboid([0, 0], [1, 0]), 200), weight=0),
             Condition("inner",
                       lambda Du: Du["u_t"] - Du["u_xx"],
-                      (Cuboid([0, 0], [1, 1]), 1600))
+                      (Cuboid([0, 0], [1, 1]), 16), weight=0)
         ]
 
     @staticmethod
     def calculate_differentials(model, freeVariables):
+        @tf.function
         def y(x):
             return model(x)[:, 0]
 
@@ -258,7 +259,7 @@ class ControlledHeatEquation1D(BoundaryValueProblem):
 
             ipt = tf.stack([t[:, 0], x[:, 0]], axis=1)
             u = y(ipt)
-            uR = control(ipt)
+            #uR = control(ipt)
 
             u_t = tape.gradient(u, t)
             u_x = tape.gradient(u, x)
@@ -267,7 +268,7 @@ class ControlledHeatEquation1D(BoundaryValueProblem):
 
         del tape
 
-        return {"t": t, "x": x, "u": u, "u_t": u_t, "u_x": u_x, "u_xx": u_xx, "uR": uR}
+        return {"t": t, "x": x, "u": u, "u_t": u_t, "u_x": u_x, "u_xx": u_xx}#, "uR": uR}
 
 
 class ControlledHeatEquation2D(BoundaryValueProblem):
@@ -447,6 +448,46 @@ class AllenCahnEquation(BoundaryValueProblem):
         del tape
 
         return {"t": t, "x": x, "u": u, "u_t": u_t, "u_x": u_x, "u_xx": u_xx}
+
+
+class KortewegDeVriesEquation(BoundaryValueProblem):
+    """
+        Class defining the KortewegDeVriesEquation equation.
+
+        (t, x) |-> y
+        """
+
+    @classproperty
+    def conditions(cls):
+        return [
+            Condition("initial",
+                      lambda Du: Du["u"] - tf.cos(np.pi * Du["x"]),
+                      (Cuboid([0, -1], [0, 1]), 200), weight=2),
+            Condition("inner",
+                      lambda Du: Du["u_t"] + Du["u"] * Du["u_x"] + 0.0025 * Du["u_xxx"],
+                      (Cuboid([0, -1], [1, 1]), 2025))
+        ]
+
+    @staticmethod
+    def calculate_differentials(model, freeVariables):
+        with tf.GradientTape(persistent=True) as tape:
+            t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
+
+            tape.watch(t)
+            tape.watch(x)
+
+            u = model(tf.stack([t[:, 0], x[:, 0]], axis=1))
+
+            u_t = tape.gradient(u, t)
+            u_x = tape.gradient(u, x)
+
+            u_xx = tape.gradient(u_x, x)
+
+            u_xxx = tape.gradient(u_xx, x)
+
+        del tape
+
+        return {"t": t, "x": x, "u": u, "u_t": u_t, "u_x": u_x, "u_xxx": u_xxx}
 
 
 class ReactionDiffusionEquation(BoundaryValueProblem):
