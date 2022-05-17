@@ -1,5 +1,4 @@
 from PDESolver import *
-import tensorflow as tf
 
 bvp = KortewegDeVriesEquation
 
