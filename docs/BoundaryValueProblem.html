@@ -30,7 +30,7 @@
 <pre><code class="python">from PDESolver.Sampling import *
 
 
-class classproperty(object):
+class _classproperty(object):
     def __init__(self, fget):
         self.fget = fget
 
@@ -84,7 +84,7 @@ class BoundaryValueProblem:
     Class for defining boundary value problems.
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         &#34;&#34;&#34;
         Returns the conditions of the boundary value problem.
@@ -122,7 +122,7 @@ class WaveEquation1D(BoundaryValueProblem):
     (t, x) |-&gt; y
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
@@ -167,7 +167,7 @@ class WaveEquation2D(BoundaryValueProblem):
     (t, x, y) |-&gt; z
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;initial_u&#34;,
@@ -210,7 +210,7 @@ class HeatEquation2D(BoundaryValueProblem):
     (t, x, y) |-&gt; z
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
@@ -251,7 +251,7 @@ class ControlledHeatEquation1D(BoundaryValueProblem):
     (t, x) |-&gt; (y, control)
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
@@ -307,7 +307,7 @@ class ControlledHeatEquation2D(BoundaryValueProblem):
     (t, x, y) |-&gt; z
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
@@ -353,7 +353,7 @@ class BurgersEquation(BoundaryValueProblem):
     (t, x) |-&gt; y
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
@@ -394,7 +394,7 @@ class VanDerPolEquation(BoundaryValueProblem):
     (t, x) |-&gt; y
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
@@ -437,7 +437,7 @@ class AllenCahnEquation(BoundaryValueProblem):
     (t, x) |-&gt; y
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
@@ -486,7 +486,7 @@ class KortewegDeVriesEquation(BoundaryValueProblem):
         (t, x) |-&gt; y
         &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
@@ -526,7 +526,7 @@ class ReactionDiffusionEquation(BoundaryValueProblem):
     (t, x) |-&gt; y
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
@@ -568,7 +568,7 @@ class MinimalSurfaceEquation(BoundaryValueProblem):
     (x, y) |-&gt; z
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;boundary1&#34;,
@@ -613,7 +613,7 @@ class FluidEquation2D(BoundaryValueProblem):
     (t, x, y) |-&gt; (v_x, v_y)
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         def field(x, y):
             return tf.concat([(1 - x) * x * (1 - y) * y, 0 * x], axis=1)
@@ -683,7 +683,7 @@ class VectorTest(BoundaryValueProblem):
 
     (t, x, y) |-&gt; (v_x, v_y)
     &#34;&#34;&#34;
-    @classproperty
+    @_classproperty
     def conditions(cls):
         def field(x, y):
             return -0.25 * tf.exp(-x ** 2 - y ** 2) * tf.concat([x, y], axis=1)
@@ -735,7 +735,7 @@ class DAE(BoundaryValueProblem):
     t |-&gt; (x_1, x_2, lambda)
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         def initPos(t):
             return tf.concat([0 * t + 1, 0 * t], axis=1)
@@ -820,7 +820,7 @@ class DAE(BoundaryValueProblem):
     (t, x) |-&gt; y
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
@@ -895,7 +895,7 @@ class DAE(BoundaryValueProblem):
     Class for defining boundary value problems.
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         &#34;&#34;&#34;
         Returns the conditions of the boundary value problem.
@@ -1010,7 +1010,7 @@ def calculate_differentials(model, freeVariables):
     (t, x) |-&gt; y
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
@@ -1173,7 +1173,7 @@ def calculate_differentials(model, freeVariables):
     (t, x) |-&gt; (y, control)
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
@@ -1258,7 +1258,7 @@ def calculate_differentials(model, freeVariables):
     (t, x, y) |-&gt; z
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
@@ -1333,7 +1333,7 @@ def calculate_differentials(model, freeVariables):
     t |-&gt; (x_1, x_2, lambda)
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         def initPos(t):
             return tf.concat([0 * t + 1, 0 * t], axis=1)
@@ -1428,7 +1428,7 @@ def calculate_differentials(model, freeVariables):
     (t, x, y) |-&gt; (v_x, v_y)
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         def field(x, y):
             return tf.concat([(1 - x) * x * (1 - y) * y, 0 * x], axis=1)
@@ -1528,7 +1528,7 @@ def calculate_differentials(model, freeVariables):
     (t, x, y) |-&gt; z
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
@@ -1598,7 +1598,7 @@ def calculate_differentials(model, freeVariables):
         (t, x) |-&gt; y
         &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
@@ -1667,7 +1667,7 @@ def calculate_differentials(model, freeVariables):
     (x, y) |-&gt; z
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;boundary1&#34;,
@@ -1741,7 +1741,7 @@ def calculate_differentials(model, freeVariables):
     (t, x) |-&gt; y
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
@@ -1812,7 +1812,7 @@ def calculate_differentials(model, freeVariables):
     (t, x) |-&gt; y
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
@@ -1883,7 +1883,7 @@ def calculate_differentials(model, freeVariables):
 
     (t, x, y) |-&gt; (v_x, v_y)
     &#34;&#34;&#34;
-    @classproperty
+    @_classproperty
     def conditions(cls):
         def field(x, y):
             return -0.25 * tf.exp(-x ** 2 - y ** 2) * tf.concat([x, y], axis=1)
@@ -1964,7 +1964,7 @@ def calculate_differentials(model, freeVariables):
     (t, x) |-&gt; y
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
@@ -2038,7 +2038,7 @@ def calculate_differentials(model, freeVariables):
     (t, x, y) |-&gt; z
     &#34;&#34;&#34;
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition(&#34;initial_u&#34;,
@@ -2092,24 +2092,6 @@ def calculate_differentials(model, freeVariables):
 </ul>
 </li>
 </ul>
-</dd>
-<dt id="PDESolver.BoundaryValueProblem.classproperty"><code class="flex name class">
-<span>class <span class="ident">classproperty</span></span>
-<span>(</span><span>fget)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">class classproperty(object):
-    def __init__(self, fget):
-        self.fget = fget
-
-    def __get__(self, owner_self, owner_cls):
-        return self.fget(owner_cls)</code></pre>
-</details>
 </dd>
 </dl>
 </section>
@@ -2223,9 +2205,6 @@ def calculate_differentials(model, freeVariables):
 <ul class="">
 <li><code><a title="PDESolver.BoundaryValueProblem.WaveEquation2D.conditions" href="#PDESolver.BoundaryValueProblem.WaveEquation2D.conditions">conditions</a></code></li>
 </ul>
-</li>
-<li>
-<h4><code><a title="PDESolver.BoundaryValueProblem.classproperty" href="#PDESolver.BoundaryValueProblem.classproperty">classproperty</a></code></h4>
 </li>
 </ul>
 </li>
