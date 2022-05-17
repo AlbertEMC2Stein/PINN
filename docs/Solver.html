@@ -113,13 +113,10 @@ class Solver:
 
         t0 = time()
         for i in range(iterations + 1):
-            # while time() - t0 &lt;= 60:
             loss = train_step()
             self.loss_history += [loss.numpy()]
 
             if i % 50 == 0:
-                # if (time() - t0) % 5 &lt; 0.01:
-                # print(&#39;\rIt {:05d}s: loss = {:10.8e} lr = {:.5f}&#39;.format(int(time() - t0), loss, 0), end=&#34;&#34;)
                 print(&#39;\rIt {:05d}: loss = {:10.8e} lr = {:.5f}&#39;.format(i, loss, lr_scheduler(i)), end=&#34;&#34;)
 
         print(&#39;\nComputation time: {:.1f} seconds&#39;.format(time() - t0))</code></pre>
@@ -236,13 +233,10 @@ class Solver:
 
         t0 = time()
         for i in range(iterations + 1):
-            # while time() - t0 &lt;= 60:
             loss = train_step()
             self.loss_history += [loss.numpy()]
 
             if i % 50 == 0:
-                # if (time() - t0) % 5 &lt; 0.01:
-                # print(&#39;\rIt {:05d}s: loss = {:10.8e} lr = {:.5f}&#39;.format(int(time() - t0), loss, 0), end=&#34;&#34;)
                 print(&#39;\rIt {:05d}: loss = {:10.8e} lr = {:.5f}&#39;.format(i, loss, lr_scheduler(i)), end=&#34;&#34;)
 
         print(&#39;\nComputation time: {:.1f} seconds&#39;.format(time() - t0))</code></pre>
@@ -313,13 +307,10 @@ class Solver:
 
     t0 = time()
     for i in range(iterations + 1):
-        # while time() - t0 &lt;= 60:
         loss = train_step()
         self.loss_history += [loss.numpy()]
 
         if i % 50 == 0:
-            # if (time() - t0) % 5 &lt; 0.01:
-            # print(&#39;\rIt {:05d}s: loss = {:10.8e} lr = {:.5f}&#39;.format(int(time() - t0), loss, 0), end=&#34;&#34;)
             print(&#39;\rIt {:05d}: loss = {:10.8e} lr = {:.5f}&#39;.format(i, loss, lr_scheduler(i)), end=&#34;&#34;)
 
     print(&#39;\nComputation time: {:.1f} seconds&#39;.format(time() - t0))</code></pre>
