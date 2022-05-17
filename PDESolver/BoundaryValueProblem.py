@@ -1,7 +1,7 @@
 from PDESolver.Sampling import *
 
 
-class _classproperty(object):
+class classproperty(object):
     def __init__(self, fget):
         self.fget = fget
 
@@ -55,7 +55,7 @@ class BoundaryValueProblem:
     Class for defining boundary value problems.
     """
 
-    @_classproperty
+    @classproperty
     def conditions(cls):
         """
         Returns the conditions of the boundary value problem.
@@ -93,7 +93,7 @@ class WaveEquation1D(BoundaryValueProblem):
     (t, x) ⟼ y
     """
 
-    @_classproperty
+    @classproperty
     def conditions(cls):
         return [
             Condition("initial",
@@ -138,7 +138,7 @@ class WaveEquation2D(BoundaryValueProblem):
     (t, x, y) ⟼ z
     """
 
-    @_classproperty
+    @classproperty
     def conditions(cls):
         return [
             Condition("initial_u",
@@ -181,7 +181,7 @@ class HeatEquation2D(BoundaryValueProblem):
     (t, x, y) ⟼ z
     """
 
-    @_classproperty
+    @classproperty
     def conditions(cls):
         return [
             Condition("initial",
@@ -222,7 +222,7 @@ class ControlledHeatEquation1D(BoundaryValueProblem):
     (t, x) ⟼ (y, control)
     """
 
-    @_classproperty
+    @classproperty
     def conditions(cls):
         return [
             Condition("initial",
@@ -278,7 +278,7 @@ class ControlledHeatEquation2D(BoundaryValueProblem):
     (t, x, y) ⟼ z
     """
 
-    @_classproperty
+    @classproperty
     def conditions(cls):
         return [
             Condition("initial",
@@ -324,7 +324,7 @@ class BurgersEquation(BoundaryValueProblem):
     (t, x) ⟼ y
     """
 
-    @_classproperty
+    @classproperty
     def conditions(cls):
         return [
             Condition("initial",
@@ -365,7 +365,7 @@ class VanDerPolEquation(BoundaryValueProblem):
     (t, x) ⟼ y
     """
 
-    @_classproperty
+    @classproperty
     def conditions(cls):
         return [
             Condition("initial",
@@ -408,7 +408,7 @@ class AllenCahnEquation(BoundaryValueProblem):
     (t, x) ⟼ y
     """
 
-    @_classproperty
+    @classproperty
     def conditions(cls):
         return [
             Condition("initial",
@@ -457,7 +457,7 @@ class KortewegDeVriesEquation(BoundaryValueProblem):
         (t, x) ⟼ y
         """
 
-    @_classproperty
+    @classproperty
     def conditions(cls):
         return [
             Condition("initial",
@@ -497,7 +497,7 @@ class ReactionDiffusionEquation(BoundaryValueProblem):
     (t, x) ⟼ y
     """
 
-    @_classproperty
+    @classproperty
     def conditions(cls):
         return [
             Condition("initial",
@@ -539,7 +539,7 @@ class MinimalSurfaceEquation(BoundaryValueProblem):
     (x, y) ⟼ z
     """
 
-    @_classproperty
+    @classproperty
     def conditions(cls):
         return [
             Condition("boundary1",
@@ -584,7 +584,7 @@ class FluidEquation2D(BoundaryValueProblem):
     (t, x, y) ⟼ (v_x, v_y)
     """
 
-    @_classproperty
+    @classproperty
     def conditions(cls):
         def field(x, y):
             return tf.concat([(1 - x) * x * (1 - y) * y, 0 * x], axis=1)
@@ -654,7 +654,7 @@ class VectorTest(BoundaryValueProblem):
 
     (t, x, y) ⟼ (v_x, v_y)
     """
-    @_classproperty
+    @classproperty
     def conditions(cls):
         def field(x, y):
             return -0.25 * tf.exp(-x ** 2 - y ** 2) * tf.concat([x, y], axis=1)
@@ -706,7 +706,7 @@ class DAE(BoundaryValueProblem):
     t ⟼ (x_1, x_2, lambda)
     """
 
-    @_classproperty
+    @classproperty
     def conditions(cls):
         def initPos(t):
             return tf.concat([0 * t + 1, 0 * t], axis=1)
