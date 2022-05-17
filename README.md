@@ -4,7 +4,7 @@
 *** that would make this better, please fork the repo and create a pull request
 *** or simply open an issue with the tag "enhancement".
 *** Don't forget to give the project a star!
-*** Thanks again! Now go create something AMAZING! :D
+*** Thanks again! Now go create something AMAZING! :D 
 -->
 
 
@@ -28,23 +28,23 @@
 <!-- PROJECT LOGO -->
 <br />
 <div align="center">
-  <a href="https://github.com/othneildrew/Best-README-Template">
+  <a href="https://github.com/albertemc2stein/PINN">
     <img src="https://cdn-icons-png.flaticon.com/512/2103/2103633.png" alt="Logo" width="80" height="80">
   </a>
 
-  <h3 align="center">Best-README-Template</h3>
+  <h3 align="center">PINN</h3>
 
   <p align="center">
-    An awesome README template to jumpstart your projects!
+    A framework for solving differential equations with neural networks.
     <br />
-    <a href="https://github.com/othneildrew/Best-README-Template"><strong>Explore the docs »</strong></a>
+    <a href="https://github.com/albertemc2stein/PINN"><strong>Explore the docs »</strong></a>
     <br />
     <br />
-    <a href="https://github.com/othneildrew/Best-README-Template">View Demo</a>
+    <a href="https://github.com/albertemc2stein/PINN">View Demo</a>
     ·
-    <a href="https://github.com/othneildrew/Best-README-Template/issues">Report Bug</a>
+    <a href="https://github.com/albertemc2stein/PINN/issues">Report Bug</a>
     ·
-    <a href="https://github.com/othneildrew/Best-README-Template/issues">Request Feature</a>
+    <a href="https://github.com/albertemc2stein/PINN/issues">Request Feature</a>
   </p>
 </div>
 
@@ -60,19 +60,11 @@
         <li><a href="#built-with">Built With</a></li>
       </ul>
     </li>
-    <li>
-      <a href="#getting-started">Getting Started</a>
-      <ul>
-        <li><a href="#prerequisites">Prerequisites</a></li>
-        <li><a href="#installation">Installation</a></li>
-      </ul>
-    </li>
     <li><a href="#usage">Usage</a></li>
     <li><a href="#roadmap">Roadmap</a></li>
     <li><a href="#contributing">Contributing</a></li>
     <li><a href="#license">License</a></li>
     <li><a href="#contact">Contact</a></li>
-    <li><a href="#acknowledgments">Acknowledgments</a></li>
   </ol>
 </details>
 
@@ -83,33 +75,27 @@
 
 [![Product Name Screen Shot][product-screenshot]](https://example.com)
 
-There are many great README templates available on GitHub; however, I didn't find one that really suited my needs so I created this enhanced one. I want to create a README template so amazing that it'll be the last one you ever need -- I think this is it.
+This project makes use of the fact that neural networks are essentially nothing more than universal
+function approximators. In essence, the neural network is trained upon minimizing a loss function
+that measures the deviation from a solution to the given differential equation (and additional constraints).
 
-Here's why:
-* Your time should be focused on creating something amazing. A project that solves a problem and helps others
-* You shouldn't be doing the same tasks over and over like creating a README from scratch
-* You should implement DRY principles to the rest of your life :smile:
+Basic approach:
+* Create a new boundary value problem
+* Add constraints and the regions hey are acting on
+* Tell the network which differentials it needs to calculate 
+* Train the network
 
-Of course, no one template will serve all projects since your needs may be different. So I'll be adding more in the near future. You may also suggest changes by forking this repo and creating a pull request or opening an issue. Thanks to all the people have contributed to expanding this template!
-
-Use the `BLANK_README.md` to get started.
+This is obviously only a very basic description of one of the many ways to utilize this approach.
+The many examples provided with this package show the abilities (and limits!) of this framework.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 
 
 ### Built With
-
-This section should list any major frameworks/libraries used to bootstrap your project. Leave any add-ons/plugins for the acknowledgements section. Here are a few examples.
-
-* [Next.js](https://nextjs.org/)
-* [React.js](https://reactjs.org/)
-* [Vue.js](https://vuejs.org/)
-* [Angular](https://angular.io/)
-* [Svelte](https://svelte.dev/)
-* [Laravel](https://laravel.com)
-* [Bootstrap](https://getbootstrap.com)
-* [JQuery](https://jquery.com)
+* [TensorFlow](https://www.tensorflow.org/) (Neural network support)
+* [NumPy](https://numpy.org/) (Efficient sampling)
+* [Matplotlib](https://matplotlib.org/) (Visualization)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -118,34 +104,41 @@ This section should list any major frameworks/libraries used to bootstrap your p
 <!-- GETTING STARTED -->
 ## Getting Started
 
-This is an example of how you may give instructions on setting up your project locally.
-To get a local copy up and running follow these simple example steps.
+This is an example of how you set up this project locally.
 
-### Prerequisites
-
-This is an example of how to list things you need to use the software and how to install them.
-* npm
-  ```sh
-  npm install npm@latest -g
-  ```
-
-### Installation
-
-_Below is an example of how you can instruct your audience on installing and setting up your app. This template doesn't rely on any external dependencies or services._
-
-1. Get a free API Key at [https://example.com](https://example.com)
-2. Clone the repo
-   ```sh
-   git clone https://github.com/your_username_/Project-Name.git
+1. Create a new virtual environment
    ```
-3. Install NPM packages
-   ```sh
-   npm install
+   python3 -m venv /path/to/new/virtual/environment
    ```
-4. Enter your API in `config.js`
-   ```js
-   const API_KEY = 'ENTER YOUR API';
+   If this does not work check that *venv* is installed and execute
    ```
+   pip3 install virtualenv
+   ```
+   if neccessary.
+
+
+2. Activate the new environment with
+   ```
+   source /path/to/new/virtual/environment/bin/activate
+   ```
+
+3. Clone the repository
+   ```
+   git clone https://github.com/AlbertEMC2Stein/PINN.git
+   ```
+
+4. Install the PDESolver package with
+   ```
+   pip3 install -e .
+   ```
+   from within the PINN directory (this might take a minute).
+
+
+5. Use the package for your own purposes or try out some of the example scripts with
+   ```
+   python3 scripts/script_name.py
+   ```
+   To see all available scripts use ``ls scripts`` first
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -154,9 +147,7 @@ _Below is an example of how you can instruct your audience on installing and set
 <!-- USAGE EXAMPLES -->
 ## Usage
 
-Use this space to show useful examples of how a project can be used. Additional screenshots, code examples and demos work well in this space. You may also link to more resources.
-
-_For more examples, please refer to the [Documentation](https://example.com)_
+_For usage examples, please refer to the [provided scripts](https://github.com/AlbertEMC2Stein/PINN/tree/main/scripts)_
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -165,15 +156,14 @@ _For more examples, please refer to the [Documentation](https://example.com)_
 <!-- ROADMAP -->
 ## Roadmap
 
-- [x] Add Changelog
-- [x] Add back to top links
-- [ ] Add Additional Templates w/ Examples
-- [ ] Add "components" document to easily copy & paste sections of the readme
-- [ ] Multi-language Support
-    - [ ] Chinese
-    - [ ] Spanish
+- [x] Add arbitrary dimension support
+- [x] Add different sampling methods 
+- [ ] Add more region types (spherical, cylindrical, etc.)
+- [ ] Add better visulization support
+    - [ ] 1D
+    - [ ] 2D
 
-See the [open issues](https://github.com/othneildrew/Best-README-Template/issues) for a full list of proposed features (and known issues).
+See the [open issues](https://github.com/albertemc2stein/PINN/issues) for a full list of proposed features (and known issues).
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -182,15 +172,13 @@ See the [open issues](https://github.com/othneildrew/Best-README-Template/issues
 <!-- CONTRIBUTING -->
 ## Contributing
 
-Contributions are what make the open source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
-
 If you have a suggestion that would make this better, please fork the repo and create a pull request. You can also simply open an issue with the tag "enhancement".
 Don't forget to give the project a star! Thanks again!
 
 1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
+2. Create your Feature Branch (`git checkout -b feature/NewFeature`)
+3. Commit your Changes (`git commit -m 'Add some NewFeature'`)
+4. Push to the Branch (`git push origin feature/NewFeature`)
 5. Open a Pull Request
 
 <p align="right">(<a href="#top">back to top</a>)</p>
@@ -209,9 +197,9 @@ Distributed under the MIT License. See `LICENSE.txt` for more information.
 <!-- CONTACT -->
 ## Contact
 
-Your Name - [@your_twitter](https://twitter.com/your_username) - email@example.com
+Tim Prokosch - prokosch@rhrk.uni-kl.de
 
-Project Link: [https://github.com/your_username/repo_name](https://github.com/your_username/repo_name)
+Project Link: [https://github.com/albertemc2stein/PINN](https://github.com/albertemc2stein/PINN)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -220,16 +208,9 @@ Project Link: [https://github.com/your_username/repo_name](https://github.com/yo
 <!-- ACKNOWLEDGMENTS -->
 ## Acknowledgments
 
-Use this space to list resources you find helpful and would like to give credit to. I've included a few of my favorites to kick things off!
+* [Implementation for Burgers equation](https://github.com/janblechschmidt/PDEsByNNs/blob/main/PINN_Solver.ipynb)
+* [Paper by Maziar Raissi](https://www.sciencedirect.com/science/article/pii/S0021999118307125)
 
-* [Choose an Open Source License](https://choosealicense.com)
-* [GitHub Emoji Cheat Sheet](https://www.webpagefx.com/tools/emoji-cheat-sheet)
-* [Malven's Flexbox Cheatsheet](https://flexbox.malven.co/)
-* [Malven's Grid Cheatsheet](https://grid.malven.co/)
-* [Img Shields](https://shields.io)
-* [GitHub Pages](https://pages.github.com)
-* [Font Awesome](https://fontawesome.com)
-* [React Icons](https://react-icons.github.io/react-icons/search)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -247,4 +228,4 @@ Use this space to list resources you find helpful and would like to give credit 
 [issues-url]: https://github.com/albertemc2stein/PINN/issues
 [license-shield]: https://img.shields.io/github/license/albertemc2stein/PINN.svg?style=for-the-badge
 [license-url]: https://github.com/albertemc2stein/PINN/blob/master/LICENSE.txt
-[product-screenshot]: images/screenshot.png
+[product-screenshot]: https://www.researchgate.net/profile/Zhen-Li-105/publication/335990167/figure/fig1/AS:806502679982080@1569296631121/Schematic-of-a-physics-informed-neural-network-PINN-where-the-loss-function-of-PINN.ppm
