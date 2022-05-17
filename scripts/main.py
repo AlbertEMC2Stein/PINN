@@ -1,6 +1,4 @@
-from PDESolver.Solver import *
-from PDESolver.Visuals import *
-from PDESolver.BoundaryValueProblem import *
+from PDESolver import *
 
 
 if __name__ == "__main__":
