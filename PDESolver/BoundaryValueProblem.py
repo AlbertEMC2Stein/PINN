@@ -1,7 +1,7 @@
 from PDESolver.Sampling import *
 
 
-class classproperty(object):
+class _classproperty(object):
     def __init__(self, fget):
         self.fget = fget
 
@@ -18,7 +18,7 @@ class Condition:
         -----------
         name: str
             Name of the condition
-        residue_fn: dict |-> tensor
+        residue_fn: dict ⟼ tensor
             Function that calculates the residue of the condition
         region_samples_pair: tuple
             Tuple of (region, number of samples)
@@ -55,7 +55,7 @@ class BoundaryValueProblem:
     Class for defining boundary value problems.
     """
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         """
         Returns the conditions of the boundary value problem.
@@ -90,10 +90,10 @@ class WaveEquation1D(BoundaryValueProblem):
     """
     Class defining the 1D wave equation as a boundary value problem.
 
-    (t, x) |-> y
+    (t, x) ⟼ y
     """
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition("initial",
@@ -135,10 +135,10 @@ class WaveEquation2D(BoundaryValueProblem):
     """
     Class defining the 2D wave equation as a boundary value problem.
 
-    (t, x, y) |-> z
+    (t, x, y) ⟼ z
     """
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition("initial_u",
@@ -178,10 +178,10 @@ class HeatEquation2D(BoundaryValueProblem):
     """
     Class defining the 2D heat equation as a boundary value problem.
 
-    (t, x, y) |-> z
+    (t, x, y) ⟼ z
     """
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition("initial",
@@ -219,10 +219,10 @@ class ControlledHeatEquation1D(BoundaryValueProblem):
     """
     Class defining the 1D heat equation as a boundary value problem with an aspect of control. (EXPERIMENTAL)
 
-    (t, x) |-> (y, control)
+    (t, x) ⟼ (y, control)
     """
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition("initial",
@@ -275,10 +275,10 @@ class ControlledHeatEquation2D(BoundaryValueProblem):
     """
     Class defining the 2D heat equation as a temporal boundary value problem. (EXPERIMENTAL)
 
-    (t, x, y) |-> z
+    (t, x, y) ⟼ z
     """
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition("initial",
@@ -321,10 +321,10 @@ class BurgersEquation(BoundaryValueProblem):
     """
     Class defining the Burgers equation as a boundary value problem.
 
-    (t, x) |-> y
+    (t, x) ⟼ y
     """
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition("initial",
@@ -362,10 +362,10 @@ class VanDerPolEquation(BoundaryValueProblem):
     """
     Class defining the Van-der-Pol equation as a boundary value problem.
 
-    (t, x) |-> y
+    (t, x) ⟼ y
     """
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition("initial",
@@ -405,10 +405,10 @@ class AllenCahnEquation(BoundaryValueProblem):
     """
     Class defining the Allen-Cahn equation as a boundary value problem.
 
-    (t, x) |-> y
+    (t, x) ⟼ y
     """
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition("initial",
@@ -454,10 +454,10 @@ class KortewegDeVriesEquation(BoundaryValueProblem):
     """
         Class defining the KortewegDeVriesEquation equation.
 
-        (t, x) |-> y
+        (t, x) ⟼ y
         """
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition("initial",
@@ -494,10 +494,10 @@ class ReactionDiffusionEquation(BoundaryValueProblem):
     """
     Class defining the Reaction-Diffusion equation as a boundary value problem.
 
-    (t, x) |-> y
+    (t, x) ⟼ y
     """
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition("initial",
@@ -536,10 +536,10 @@ class MinimalSurfaceEquation(BoundaryValueProblem):
     """
     Class defining the minimal surface equation as a boundary value problem.
 
-    (x, y) |-> z
+    (x, y) ⟼ z
     """
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         return [
             Condition("boundary1",
@@ -581,10 +581,10 @@ class FluidEquation2D(BoundaryValueProblem):
     """
     Class defining the fluid equation as a boundary value problem. (EXPERIMENTAL)
 
-    (t, x, y) |-> (v_x, v_y)
+    (t, x, y) ⟼ (v_x, v_y)
     """
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         def field(x, y):
             return tf.concat([(1 - x) * x * (1 - y) * y, 0 * x], axis=1)
@@ -652,9 +652,9 @@ class VectorTest(BoundaryValueProblem):
     """
     Class defining a equation for reconstructing a gradient field. (EXPERIMENTAL)
 
-    (t, x, y) |-> (v_x, v_y)
+    (t, x, y) ⟼ (v_x, v_y)
     """
-    @classproperty
+    @_classproperty
     def conditions(cls):
         def field(x, y):
             return -0.25 * tf.exp(-x ** 2 - y ** 2) * tf.concat([x, y], axis=1)
@@ -703,10 +703,10 @@ class DAE(BoundaryValueProblem):
     """
     Class defining the differential algebraic equation for a pendulum.
 
-    t |-> (x_1, x_2, lambda)
+    t ⟼ (x_1, x_2, lambda)
     """
 
-    @classproperty
+    @_classproperty
     def conditions(cls):
         def initPos(t):
             return tf.concat([0 * t + 1, 0 * t], axis=1)
