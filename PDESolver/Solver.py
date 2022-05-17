@@ -84,13 +84,10 @@ class Solver:
 
         t0 = time()
         for i in range(iterations + 1):
-            # while time() - t0 <= 60:
             loss = train_step()
             self.loss_history += [loss.numpy()]
 
             if i % 50 == 0:
-                # if (time() - t0) % 5 < 0.01:
-                # print('\rIt {:05d}s: loss = {:10.8e} lr = {:.5f}'.format(int(time() - t0), loss, 0), end="")
                 print('\rIt {:05d}: loss = {:10.8e} lr = {:.5f}'.format(i, loss, lr_scheduler(i)), end="")
 
         print('\nComputation time: {:.1f} seconds'.format(time() - t0))
