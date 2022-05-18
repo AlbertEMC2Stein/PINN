@@ -65,7 +65,7 @@ that measures the deviation from a solution to the given differential equation (
 Basic approach:
 * Create a new boundary value problem
 * Add constraints and the regions hey are acting on
-* Tell the network which differentials it needs to calculate 
+* Tell the network which differentials it needs to calculate
 * Train the network
 
 This is obviously only a very basic description of one of the many ways to utilize this approach.
@@ -75,7 +75,7 @@ The many examples provided with this package show the abilities (and limits!) of
 
 
 
-### Built With
+### Built with
 * [TensorFlow](https://www.tensorflow.org/) (Neural network support)
 * [NumPy](https://numpy.org/) (Efficient sampling)
 * [Matplotlib](https://matplotlib.org/) (Visualization)
@@ -87,44 +87,48 @@ The many examples provided with this package show the abilities (and limits!) of
 <!-- GETTING STARTED -->
 ## Getting Started
 
-This is an example of how you set up this project locally.
-
-1. Create a new virtual environment
-   ```
-   python3 -m venv /path/to/new/virtual/environment
-   ```
-   If this does not work check that *venv* is installed and execute
-   ```
-   pip3 install virtualenv
-   ```
-   if neccessary.
+The `PDESolver` is available as a Python package that can be installed and used with Python 3.7+. This section shows how to compile the PDESolver package from source using [`pip`](https://pypi.org/project/pip/). It is recommended to install the package inside a [virtual environment](https://docs.python.org/3/tutorial/venv.html) when testing.
 
 
-2. Activate the new environment with
-   ```
-   source /path/to/new/virtual/environment/bin/activate
-   ```
+### Create a Virtual Environment
 
-3. Clone the repository
-   ```
-   git clone https://github.com/AlbertEMC2Stein/PINN.git
-   ```
+We are going to use the [`venv`](https://docs.python.org/3/library/venv.html) package for creating a lightweight virtual environment. Create an empty virtualenv with:
 
-4. Install the PDESolver package with
-   ```
-   pip3 install -e .
-   ```
-   from within the PINN directory (this might take a minute).
+```
+python3 -m venv venv
+```
+
+Here, the second `venv` is the name of the virtual environment. You can replace it with any name of your choice with full path, e.g., use `~/Desktop/myenv` to create a virtualenv called `myenv` in the `Desktop` folder. If the command fails to run, you might need to install the `venv` package itself first using `pip3 install virtualenv`.
+
+One the virtual environment is created, activate it with:
+
+```
+source venv/bin/activate
+```
+
+where `venv` is the name of the virtualenv. Now, you can install and test the `PDESolver` package inside this environment.
 
 
-5. Use the package for your own purposes or try out some of the example scripts with
-   ```
-   python3 scripts/script_name.py
-   ```
-   To see all available scripts use ``ls scripts`` first
+### Install the `PDESolver` package
+
+Download the latest source code by directly cloning the repository:
+
+```
+git clone https://github.com/AlbertEMC2Stein/PINN
+```
+
+and then compile it by running
+
+```
+pip3 install -e .
+```
+
+from within the cloned directory (`cd PINN`). This would download all the package dependencies which might take a minute. If there is an error locating any of the dependencies, make sure you are using Python 3.7+. You can also try upgrading your `pip` to the latest version by running `pip3 install --upgrade pip`.
+
+The package can now be imported into any Python scripts running inside this virtual environment. See the `scripts/` folder for some examples to get you started.
+
 
 <p align="right">(<a href="#top">back to top</a>)</p>
-
 
 
 <!-- USAGE EXAMPLES -->
@@ -140,7 +144,7 @@ _For usage examples, please refer to the [provided scripts](https://github.com/A
 ## Roadmap
 
 - [x] Add arbitrary dimension support
-- [x] Add different sampling methods 
+- [x] Add different sampling methods
 - [ ] Add more region types (spherical, cylindrical, etc.)
 - [ ] Add better visulization support
     - [ ] 1D
