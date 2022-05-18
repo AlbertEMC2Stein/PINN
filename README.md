@@ -100,7 +100,7 @@ python3 -m venv venv
 
 Here, the second `venv` is the name of the virtual environment. You can replace it with any name of your choice with full path, e.g., use `~/Desktop/myenv` to create a virtualenv called `myenv` in the `Desktop` folder. If the command fails to run, you might need to install the `venv` package itself first using `pip3 install virtualenv`.
 
-One the virtual environment is created, activate it with:
+Once the virtual environment is created, activate it with:
 
 ```
 source venv/bin/activate
