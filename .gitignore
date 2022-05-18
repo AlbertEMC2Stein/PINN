@@ -1,5 +1,13 @@
-.DS_Store
+# IntelliJ
 .idea
+
+# Python
 __pycache__/
 *.pyc
 out/
+venv/
+*.egg-info
+
+# macOS
+.DS_Store
+._*
