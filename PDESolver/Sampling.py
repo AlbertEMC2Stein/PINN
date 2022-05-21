@@ -99,7 +99,7 @@ class Union(Region):
 
         Parameters
         -----------
-        regions: list
+        regions: Region
             List of regions
         """
 
