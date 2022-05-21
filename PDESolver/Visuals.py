@@ -1,11 +1,8 @@
 import os
 import tensorflow as tf
 import numpy as np
-import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-
-matplotlib.use('macosx')
 
 
 def _outFolderExists():
@@ -90,7 +87,7 @@ def plot_1D(solver):
         fig, ax = plt.subplots()
         xdata, ydata = tf.linspace(bounds[0][1], bounds[1][1], 1000), []
         ln, = plt.plot([], [], color='b')
-        title = ax.text(0, maxu * 0.9, "", ha='center')
+        title = ax.text((bounds[0][1] + bounds[1][1]) / 2, maxu - 0.1 * abs(maxu), "", ha='center')
 
         def init():
             ax.set_xlim(bounds[0][1], bounds[1][1])
@@ -239,11 +236,12 @@ def plot_phaseplot(solver):
         pendulum, = plt.plot([], [], 'lightgray')
         ln, = plt.plot([], [], 'cornflowerblue')
         sc, = plt.plot([], [], 'bo', markersize=10)
+        title = ax.text((min(xd) + max(xd)) / 2, 0.1, "", ha='center')
 
         def init():
             ax.set_xlim(-1.25, 1.25)
             ax.set_ylim(-1.25, 0.25)
-            return ln, sc, pendulum
+            return ln, sc, pendulum, title
 
         def update(frame):
             trail = 20
@@ -251,15 +249,16 @@ def plot_phaseplot(solver):
             pendulum.set_data([0, xd[frame]], [0, yd[frame]])
             ln.set_data(xd[start:frame+1], yd[start:frame+1])
             sc.set_data(xd[frame], yd[frame])
-            plt.title("t = %.2f" % frame)
-            return ln, sc, pendulum
+            title.set_text(u"t = {:.3f}".format(frame))
+
+            return ln, sc, pendulum, title
 
         anim = FuncAnimation(fig, update, frames=np.arange(len(tspace)),
-                            init_func=init, blit=False, interval=16)
+                            init_func=init, blit=True, interval=16)
 
         anim.save("out/%s_solution.gif" % solver.bvp.__name__, fps=60)
         plt.show()
 
     _outFolderExists()
-    _plot_loss()
+    _plot_loss(solver)
     animate_solution()
