@@ -6,16 +6,17 @@ from matplotlib.animation import FuncAnimation
 
 
 def _outFolderExists():
-    if not os.path.isdir('out/'):
-        os.mkdir('out/')
+    if not os.path.isdir('../out/'):
+        os.mkdir('../out/')
 
 
 def _plot_loss(solver):
     fig = plt.figure(figsize=(9, 6))
     ax = fig.add_subplot(111)
     ax.semilogy(range(len(solver.loss_history)), solver.loss_history, 'k-')
-    ax.set_xlabel('$n_{epoch}$')
-    ax.set_ylabel('$\\phi_{n_{epoch}}$')
+    ax.set_xlabel('$Iteration$')
+    ax.set_ylabel('$Loss$')
+    ax.set_xlim(0, len(solver.loss_history))
     plt.show()
 
 
@@ -44,7 +45,6 @@ def plot_1D(solver):
         plt.ylabel('$x$')
 
         plt.title('Positions of collocation points and boundary data')
-        # plt.savefig('Xdata_Burgers.pdf', bbox_inches='tight', dpi=300)
         plt.show()
 
     def plot_u():
@@ -69,8 +69,10 @@ def plot_1D(solver):
         ax.view_init(35, 35)
         ax.set_xlabel('$t$')
         ax.set_ylabel('$x$')
-        ax.set_zlabel('$u_\\theta(t,x)$')
+        ax.set_zlabel('$u(t, x)$')
         ax.set_title('Solution of equation')
+
+        plt.savefig('../out/3D_%s_solution.pdf' % solver.bvp.__name__, bbox_inches='tight', dpi=300)
 
         fig = plt.figure(figsize=(9, 6))
         plt.imshow(U, cmap='viridis')
@@ -78,7 +80,7 @@ def plot_1D(solver):
         ax.set_ylabel('$x$')
         ax.set_title('Solution of equation')
 
-        plt.savefig('out/%s_solution.pdf' % solver.bvp.__name__, bbox_inches='tight', dpi=300);
+        plt.savefig('../out/2D_%s_solution.pdf' % solver.bvp.__name__, bbox_inches='tight', dpi=300)
         plt.show()
 
         return minu, maxu
@@ -105,7 +107,7 @@ def plot_1D(solver):
         anim = FuncAnimation(fig, update, frames=np.linspace(bounds[0][0], bounds[1][0], 300),
                             interval=16, init_func=init, blit=True)
 
-        anim.save("out/%s_solution.gif" % solver.bvp.__name__, fps=30)
+        anim.save("../out/2D_%s_solution.gif" % solver.bvp.__name__, fps=30)
         plt.show()
 
     inner = [cond for cond in solver.bvp.conditions if cond.name == "inner"][0]
@@ -158,7 +160,7 @@ def plot_2D(solver):
         anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 120),
                              interval=16, blit=False)
 
-        anim.save("out/%s_solution.gif" % solver.bvp.__name__, fps=30)
+        anim.save("../out/%s_solution.gif" % solver.bvp.__name__, fps=30)
         plt.show()
 
     _plot_loss(solver)
@@ -209,7 +211,7 @@ def plot_2Dvectorfield(solver):
         anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 240),
                              interval=16, blit=False)
 
-        anim.save("out/%s_solution.gif" % solver.bvp.__name__, fps=30)
+        anim.save("../out/%s_solution.gif" % solver.bvp.__name__, fps=30)
         plt.show()
 
     _outFolderExists()
@@ -236,7 +238,7 @@ def plot_phaseplot(solver):
         pendulum, = plt.plot([], [], 'lightgray')
         ln, = plt.plot([], [], 'cornflowerblue')
         sc, = plt.plot([], [], 'bo', markersize=10)
-        title = ax.text((min(xd) + max(xd)) / 2, 0.1, "", ha='center')
+        title = ax.text(0, 0.1, "", ha='center')
 
         def init():
             ax.set_xlim(-1.25, 1.25)
@@ -256,7 +258,7 @@ def plot_phaseplot(solver):
         anim = FuncAnimation(fig, update, frames=np.arange(len(tspace)),
                             init_func=init, blit=True, interval=16)
 
-        anim.save("out/%s_solution.gif" % solver.bvp.__name__, fps=60)
+        anim.save("../out/%s_solution.gif" % solver.bvp.__name__, fps=60)
         plt.show()
 
     _outFolderExists()
