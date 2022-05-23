@@ -30,24 +30,22 @@
 <pre><code class="python">import os
 import tensorflow as tf
 import numpy as np
-import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
-matplotlib.use(&#39;macosx&#39;)
-
 
 def _outFolderExists():
-    if not os.path.isdir(&#39;out/&#39;):
-        os.mkdir(&#39;out/&#39;)
+    if not os.path.isdir(&#39;../out/&#39;):
+        os.mkdir(&#39;../out/&#39;)
 
 
 def _plot_loss(solver):
     fig = plt.figure(figsize=(9, 6))
     ax = fig.add_subplot(111)
     ax.semilogy(range(len(solver.loss_history)), solver.loss_history, &#39;k-&#39;)
-    ax.set_xlabel(&#39;$n_{epoch}$&#39;)
-    ax.set_ylabel(&#39;$\\phi_{n_{epoch}}$&#39;)
+    ax.set_xlabel(&#39;$Iteration$&#39;)
+    ax.set_ylabel(&#39;$Loss$&#39;)
+    ax.set_xlim(0, len(solver.loss_history))
     plt.show()
 
 
@@ -76,7 +74,6 @@ def plot_1D(solver):
         plt.ylabel(&#39;$x$&#39;)
 
         plt.title(&#39;Positions of collocation points and boundary data&#39;)
-        # plt.savefig(&#39;Xdata_Burgers.pdf&#39;, bbox_inches=&#39;tight&#39;, dpi=300)
         plt.show()
 
     def plot_u():
@@ -101,8 +98,10 @@ def plot_1D(solver):
         ax.view_init(35, 35)
         ax.set_xlabel(&#39;$t$&#39;)
         ax.set_ylabel(&#39;$x$&#39;)
-        ax.set_zlabel(&#39;$u_\\theta(t,x)$&#39;)
+        ax.set_zlabel(&#39;$u(t, x)$&#39;)
         ax.set_title(&#39;Solution of equation&#39;)
+
+        plt.savefig(&#39;../out/3D_%s_solution.pdf&#39; % solver.bvp.__name__, bbox_inches=&#39;tight&#39;, dpi=300)
 
         fig = plt.figure(figsize=(9, 6))
         plt.imshow(U, cmap=&#39;viridis&#39;)
@@ -110,7 +109,7 @@ def plot_1D(solver):
         ax.set_ylabel(&#39;$x$&#39;)
         ax.set_title(&#39;Solution of equation&#39;)
 
-        plt.savefig(&#39;out/%s_solution.pdf&#39; % solver.bvp.__name__, bbox_inches=&#39;tight&#39;, dpi=300);
+        plt.savefig(&#39;../out/2D_%s_solution.pdf&#39; % solver.bvp.__name__, bbox_inches=&#39;tight&#39;, dpi=300)
         plt.show()
 
         return minu, maxu
@@ -119,7 +118,7 @@ def plot_1D(solver):
         fig, ax = plt.subplots()
         xdata, ydata = tf.linspace(bounds[0][1], bounds[1][1], 1000), []
         ln, = plt.plot([], [], color=&#39;b&#39;)
-        title = ax.text(0, maxu * 0.9, &#34;&#34;, ha=&#39;center&#39;)
+        title = ax.text((bounds[0][1] + bounds[1][1]) / 2, maxu - 0.1 * abs(maxu), &#34;&#34;, ha=&#39;center&#39;)
 
         def init():
             ax.set_xlim(bounds[0][1], bounds[1][1])
@@ -137,7 +136,7 @@ def plot_1D(solver):
         anim = FuncAnimation(fig, update, frames=np.linspace(bounds[0][0], bounds[1][0], 300),
                             interval=16, init_func=init, blit=True)
 
-        anim.save(&#34;out/%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
+        anim.save(&#34;../out/2D_%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
         plt.show()
 
     inner = [cond for cond in solver.bvp.conditions if cond.name == &#34;inner&#34;][0]
@@ -190,7 +189,7 @@ def plot_2D(solver):
         anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 120),
                              interval=16, blit=False)
 
-        anim.save(&#34;out/%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
+        anim.save(&#34;../out/%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
         plt.show()
 
     _plot_loss(solver)
@@ -241,7 +240,7 @@ def plot_2Dvectorfield(solver):
         anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 240),
                              interval=16, blit=False)
 
-        anim.save(&#34;out/%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
+        anim.save(&#34;../out/%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
         plt.show()
 
     _outFolderExists()
@@ -268,11 +267,12 @@ def plot_phaseplot(solver):
         pendulum, = plt.plot([], [], &#39;lightgray&#39;)
         ln, = plt.plot([], [], &#39;cornflowerblue&#39;)
         sc, = plt.plot([], [], &#39;bo&#39;, markersize=10)
+        title = ax.text(0, 0.1, &#34;&#34;, ha=&#39;center&#39;)
 
         def init():
             ax.set_xlim(-1.25, 1.25)
             ax.set_ylim(-1.25, 0.25)
-            return ln, sc, pendulum
+            return ln, sc, pendulum, title
 
         def update(frame):
             trail = 20
@@ -280,17 +280,18 @@ def plot_phaseplot(solver):
             pendulum.set_data([0, xd[frame]], [0, yd[frame]])
             ln.set_data(xd[start:frame+1], yd[start:frame+1])
             sc.set_data(xd[frame], yd[frame])
-            plt.title(&#34;t = %.2f&#34; % frame)
-            return ln, sc, pendulum
+            title.set_text(u&#34;t = {:.3f}&#34;.format(frame))
+
+            return ln, sc, pendulum, title
 
         anim = FuncAnimation(fig, update, frames=np.arange(len(tspace)),
-                            init_func=init, blit=False, interval=16)
+                            init_func=init, blit=True, interval=16)
 
-        anim.save(&#34;out/%s_solution.gif&#34; % solver.bvp.__name__, fps=60)
+        anim.save(&#34;../out/%s_solution.gif&#34; % solver.bvp.__name__, fps=60)
         plt.show()
 
     _outFolderExists()
-    _plot_loss()
+    _plot_loss(solver)
     animate_solution()</code></pre>
 </details>
 </section>
@@ -340,7 +341,6 @@ def plot_phaseplot(solver):
         plt.ylabel(&#39;$x$&#39;)
 
         plt.title(&#39;Positions of collocation points and boundary data&#39;)
-        # plt.savefig(&#39;Xdata_Burgers.pdf&#39;, bbox_inches=&#39;tight&#39;, dpi=300)
         plt.show()
 
     def plot_u():
@@ -365,8 +365,10 @@ def plot_phaseplot(solver):
         ax.view_init(35, 35)
         ax.set_xlabel(&#39;$t$&#39;)
         ax.set_ylabel(&#39;$x$&#39;)
-        ax.set_zlabel(&#39;$u_\\theta(t,x)$&#39;)
+        ax.set_zlabel(&#39;$u(t, x)$&#39;)
         ax.set_title(&#39;Solution of equation&#39;)
+
+        plt.savefig(&#39;../out/3D_%s_solution.pdf&#39; % solver.bvp.__name__, bbox_inches=&#39;tight&#39;, dpi=300)
 
         fig = plt.figure(figsize=(9, 6))
         plt.imshow(U, cmap=&#39;viridis&#39;)
@@ -374,7 +376,7 @@ def plot_phaseplot(solver):
         ax.set_ylabel(&#39;$x$&#39;)
         ax.set_title(&#39;Solution of equation&#39;)
 
-        plt.savefig(&#39;out/%s_solution.pdf&#39; % solver.bvp.__name__, bbox_inches=&#39;tight&#39;, dpi=300);
+        plt.savefig(&#39;../out/2D_%s_solution.pdf&#39; % solver.bvp.__name__, bbox_inches=&#39;tight&#39;, dpi=300)
         plt.show()
 
         return minu, maxu
@@ -383,7 +385,7 @@ def plot_phaseplot(solver):
         fig, ax = plt.subplots()
         xdata, ydata = tf.linspace(bounds[0][1], bounds[1][1], 1000), []
         ln, = plt.plot([], [], color=&#39;b&#39;)
-        title = ax.text(0, maxu * 0.9, &#34;&#34;, ha=&#39;center&#39;)
+        title = ax.text((bounds[0][1] + bounds[1][1]) / 2, maxu - 0.1 * abs(maxu), &#34;&#34;, ha=&#39;center&#39;)
 
         def init():
             ax.set_xlim(bounds[0][1], bounds[1][1])
@@ -401,7 +403,7 @@ def plot_phaseplot(solver):
         anim = FuncAnimation(fig, update, frames=np.linspace(bounds[0][0], bounds[1][0], 300),
                             interval=16, init_func=init, blit=True)
 
-        anim.save(&#34;out/%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
+        anim.save(&#34;../out/2D_%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
         plt.show()
 
     inner = [cond for cond in solver.bvp.conditions if cond.name == &#34;inner&#34;][0]
@@ -468,7 +470,7 @@ def plot_phaseplot(solver):
         anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 120),
                              interval=16, blit=False)
 
-        anim.save(&#34;out/%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
+        anim.save(&#34;../out/%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
         plt.show()
 
     _plot_loss(solver)
@@ -533,7 +535,7 @@ def plot_phaseplot(solver):
         anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 240),
                              interval=16, blit=False)
 
-        anim.save(&#34;out/%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
+        anim.save(&#34;../out/%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
         plt.show()
 
     _outFolderExists()
@@ -574,11 +576,12 @@ def plot_phaseplot(solver):
         pendulum, = plt.plot([], [], &#39;lightgray&#39;)
         ln, = plt.plot([], [], &#39;cornflowerblue&#39;)
         sc, = plt.plot([], [], &#39;bo&#39;, markersize=10)
+        title = ax.text(0, 0.1, &#34;&#34;, ha=&#39;center&#39;)
 
         def init():
             ax.set_xlim(-1.25, 1.25)
             ax.set_ylim(-1.25, 0.25)
-            return ln, sc, pendulum
+            return ln, sc, pendulum, title
 
         def update(frame):
             trail = 20
@@ -586,17 +589,18 @@ def plot_phaseplot(solver):
             pendulum.set_data([0, xd[frame]], [0, yd[frame]])
             ln.set_data(xd[start:frame+1], yd[start:frame+1])
             sc.set_data(xd[frame], yd[frame])
-            plt.title(&#34;t = %.2f&#34; % frame)
-            return ln, sc, pendulum
+            title.set_text(u&#34;t = {:.3f}&#34;.format(frame))
+
+            return ln, sc, pendulum, title
 
         anim = FuncAnimation(fig, update, frames=np.arange(len(tspace)),
-                            init_func=init, blit=False, interval=16)
+                            init_func=init, blit=True, interval=16)
 
-        anim.save(&#34;out/%s_solution.gif&#34; % solver.bvp.__name__, fps=60)
+        anim.save(&#34;../out/%s_solution.gif&#34; % solver.bvp.__name__, fps=60)
         plt.show()
 
     _outFolderExists()
-    _plot_loss()
+    _plot_loss(solver)
     animate_solution()</code></pre>
 </details>
 </dd>
