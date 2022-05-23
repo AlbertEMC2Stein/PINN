@@ -86,6 +86,46 @@ class BoundaryValueProblem:
         ...
 
 
+class Laplace(BoundaryValueProblem):
+    """
+    Class defining the Laplace equation in 2D as a boundary value problem.
+
+    (x, y) ⟼ z
+    """
+
+    @classproperty
+    def conditions(cls):
+        return [
+            Condition("boundary",
+                      lambda Du: Du["u"],
+                      (Union(Cuboid([0, 0], [0, 1]), Cuboid([0, 0], [1, 0]), Cuboid([1, 0], [1, 1]), Cuboid([0, 1], [1, 1])), 100),
+                      weight=5),
+            Condition("inner",
+                      lambda Du: Du["u_xx"] + Du["u_yy"] - Du["u"]**3 + Du["u"] + 10 * Du["x"]*Du["y"],
+                      (Cuboid([0, 0], [1, 1]), 1600))
+        ]
+
+    @staticmethod
+    def calculate_differentials(model, freeVariables):
+        with tf.GradientTape(persistent=True) as tape:
+            x, y = freeVariables[:, 0:1], freeVariables[:, 1:2]
+
+            tape.watch(x)
+            tape.watch(y)
+
+            u = model(tf.stack([x[:, 0], y[:, 0]], axis=1))
+
+            u_x = tape.gradient(u, x)
+            u_y = tape.gradient(u, y)
+
+            u_xx = tape.gradient(u_x, x)
+            u_yy = tape.gradient(u_y, y)
+
+        del tape
+
+        return {"x": x, "y": y, "u": u, "u_x": u_x, "u_y": u_y, "u_xx": u_xx, "u_yy": u_yy}
+
+
 class WaveEquation1D(BoundaryValueProblem):
     """
     Class defining the 1D wave equation as a boundary value problem.
@@ -97,7 +137,7 @@ class WaveEquation1D(BoundaryValueProblem):
     def conditions(cls):
         return [
             Condition("initial",
-                      lambda Du: Du["u"] - tf.cos(np.pi / 2 * Du["x"]),
+                      lambda Du: Du["u"] - tf.sin(np.pi * Du["x"]),
                       (Cuboid([0, -1], [0, 1]), 50)),
             Condition("boundary1",
                       lambda Du: Du["u_t"],
@@ -780,7 +820,7 @@ class DoublePendulum(BoundaryValueProblem):
             return tf.concat([0*t + 1, 0*t, 0*t + 1, 0*t - 1], axis=1)
 
         def ode(t, u1, u2, alpha1, alpha2):
-            return tf.concat * Du["u"] - tf.concat([0*t, 0*t + g, 0*t, 0*t + g], axis=1)
+            return tf.concat * u1 - tf.concat([0*t, 0*t + g, 0*t, 0*t + g], axis=1)
 
 
         return [
