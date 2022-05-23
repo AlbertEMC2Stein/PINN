@@ -56,7 +56,7 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-[![PINN Screen Shot][PINN-screenshot]](https://en.wikipedia.org/wiki/Physics-informed_neural_networks)
+[![PINN Screen Shot][PINN-Screenshot]](https://en.wikipedia.org/wiki/Physics-informed_neural_networks)
 
 This project makes use of the fact that neural networks are essentially nothing more than universal
 function approximators. In essence, the neural network is trained upon minimizing a loss function
@@ -215,4 +215,4 @@ Project Link: [https://github.com/albertemc2stein/PINN](https://github.com/alber
 [issues-url]: https://github.com/albertemc2stein/PINN/issues
 [license-shield]: https://img.shields.io/github/license/albertemc2stein/PINN.svg?style=for-the-badge
 [license-url]: https://github.com/albertemc2stein/PINN/blob/master/LICENSE.txt
-[PINN-screenshot]: https://www.researchgate.net/profile/Zhen-Li-105/publication/335990167/figure/fig1/AS:806502679982080@1569296631121/Schematic-of-a-physics-informed-neural-network-PINN-where-the-loss-function-of-PINN.png
+[PINN-screenshot]: https://media.springernature.com/relative-r300-703_m1050/springer-static/image/art%3A10.1038%2Fs42254-021-00314-5/MediaObjects/42254_2021_314_Figc_HTML.png
