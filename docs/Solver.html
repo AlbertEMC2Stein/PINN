@@ -66,6 +66,7 @@ class Solver:
         self.model = model
         self.bvp = bvp
         self.loss_history = []
+        self.time = 0
 
     def train(self, optimizer, lr_scheduler, iterations=10000):
         &#34;&#34;&#34;
@@ -117,9 +118,10 @@ class Solver:
             self.loss_history += [loss.numpy()]
 
             if i % 50 == 0:
-                print(&#39;\rIt {:05d}: loss = {:10.8e} lr = {:.5f}&#39;.format(i, loss, lr_scheduler(i)), end=&#34;&#34;)
+                print(&#39;\rIt {:05d}/{:05d}: loss = {:10.8e} lr = {:.5f}&#39;.format(i, iterations, loss, lr_scheduler(i)), end=&#34;&#34;)
 
-        print(&#39;\nComputation time: {:.1f} seconds&#39;.format(time() - t0))</code></pre>
+        self.time = time() - t0
+        print(&#39;\nComputation time: {:.1f} seconds&#39;.format(self.time))</code></pre>
 </details>
 </section>
 <section>
@@ -186,6 +188,7 @@ class Solver:
         self.model = model
         self.bvp = bvp
         self.loss_history = []
+        self.time = 0
 
     def train(self, optimizer, lr_scheduler, iterations=10000):
         &#34;&#34;&#34;
@@ -237,9 +240,10 @@ class Solver:
             self.loss_history += [loss.numpy()]
 
             if i % 50 == 0:
-                print(&#39;\rIt {:05d}: loss = {:10.8e} lr = {:.5f}&#39;.format(i, loss, lr_scheduler(i)), end=&#34;&#34;)
+                print(&#39;\rIt {:05d}/{:05d}: loss = {:10.8e} lr = {:.5f}&#39;.format(i, iterations, loss, lr_scheduler(i)), end=&#34;&#34;)
 
-        print(&#39;\nComputation time: {:.1f} seconds&#39;.format(time() - t0))</code></pre>
+        self.time = time() - t0
+        print(&#39;\nComputation time: {:.1f} seconds&#39;.format(self.time))</code></pre>
 </details>
 <h3>Methods</h3>
 <dl>
@@ -311,9 +315,10 @@ class Solver:
         self.loss_history += [loss.numpy()]
 
         if i % 50 == 0:
-            print(&#39;\rIt {:05d}: loss = {:10.8e} lr = {:.5f}&#39;.format(i, loss, lr_scheduler(i)), end=&#34;&#34;)
+            print(&#39;\rIt {:05d}/{:05d}: loss = {:10.8e} lr = {:.5f}&#39;.format(i, iterations, loss, lr_scheduler(i)), end=&#34;&#34;)
 
-    print(&#39;\nComputation time: {:.1f} seconds&#39;.format(time() - t0))</code></pre>
+    self.time = time() - t0
+    print(&#39;\nComputation time: {:.1f} seconds&#39;.format(self.time))</code></pre>
 </details>
 </dd>
 </dl>

@@ -39,7 +39,7 @@ class classproperty(object):
 
 
 class Condition:
-    def __init__(self, name, residue_fn, region_samples_pair, sampler=Equidistant(), weight=1):
+    def __init__(self, name, residue_fn, region_samples_pair, sampler=Random(), weight=1):
         &#34;&#34;&#34;
         Class for defining conditions for boundary value problems.
 
@@ -114,6 +114,15 @@ class BoundaryValueProblem:
         &#34;&#34;&#34;
         ...
 
+    @classmethod
+    def get_debug_string(cls):
+        debug = &#34;&#34;
+        for cond in cls.conditions:
+            samples = len(cond.sample_points())
+            debug += &#34;%s: %d\t&#34; % (cond.name, samples)
+
+        return debug[:-1]
+
 
 class Laplace(BoundaryValueProblem):
     &#34;&#34;&#34;
@@ -125,12 +134,14 @@ class Laplace(BoundaryValueProblem):
     @classproperty
     def conditions(cls):
         return [
-            Condition(&#34;boundary&#34;,
+            Condition(&#34;zero_boundary&#34;,
                       lambda Du: Du[&#34;u&#34;],
-                      (Union(Cuboid([0, 0], [0, 1]), Cuboid([0, 0], [1, 0]), Cuboid([1, 0], [1, 1]), Cuboid([0, 1], [1, 1])), 100),
-                      weight=5),
+                      (Union(Cuboid([0, 0], [0, 1]), Cuboid([0, 0], [1, 0]), Cuboid([1, 0], [1, 1])), 180)),
+            Condition(&#34;f_boundary&#34;,
+                      lambda Du: Du[&#34;u&#34;] - tf.where(tf.abs(Du[&#34;x&#34;] - 0.5) &lt; 0.25, 1., 0.), #2 * Du[&#34;x&#34;] * (1 - Du[&#34;x&#34;]),
+                      (Cuboid([0, 1], [1, 1]), 400), weight=2),
             Condition(&#34;inner&#34;,
-                      lambda Du: Du[&#34;u_xx&#34;] + Du[&#34;u_yy&#34;] - Du[&#34;u&#34;]**3 + Du[&#34;u&#34;] + 10 * Du[&#34;x&#34;]*Du[&#34;y&#34;],
+                      lambda Du: Du[&#34;u_xx&#34;] + Du[&#34;u_yy&#34;],
                       (Cuboid([0, 0], [1, 1]), 1600))
         ]
 
@@ -166,17 +177,14 @@ class WaveEquation1D(BoundaryValueProblem):
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
-                      lambda Du: Du[&#34;u&#34;] - tf.sin(np.pi * Du[&#34;x&#34;]),
-                      (Cuboid([0, -1], [0, 1]), 50)),
+                      lambda Du: Du[&#34;u&#34;] - 1 / (200*(Du[&#34;x&#34;] + 0.5)**2 + 1) - 1 / (200*(Du[&#34;x&#34;] - 0.5)**2 + 2),
+                      (Cuboid([0, -1], [0, 1]), 100), weight=2),
             Condition(&#34;boundary1&#34;,
                       lambda Du: Du[&#34;u_t&#34;],
-                      (Cuboid([0, -1], [0, 1]), 50)),
-            Condition(&#34;boundary2&#34;,
-                      lambda Du: Du[&#34;u&#34;],
-                      (Union(Cuboid([0, -1], [2, -1]), Cuboid([0, 1], [2, 1])), 100)),
+                      (Cuboid([0, -1], [0, 1]), 100), weight=2),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_tt&#34;] - Du[&#34;u_xx&#34;],
-                      (Cuboid([0, -1], [2, 1]), 1000))
+                      (Cuboid([0, -1], [1, 1]), 900))
         ]
 
     @staticmethod
@@ -243,6 +251,49 @@ class WaveEquation2D(BoundaryValueProblem):
                 &#34;u_yy&#34;: u_yy}
 
 
+class HeatEquation1D(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the 1D heat equation as a boundary value problem.
+
+    (t, x) ⟼ (y, control)
+    &#34;&#34;&#34;
+
+    @classproperty
+    def conditions(cls):
+        return [
+            Condition(&#34;initial&#34;,
+                      lambda Du: Du[&#34;u&#34;] - 8*Du[&#34;x&#34;]**2 * (1 - Du[&#34;x&#34;])**2,
+                      (Cuboid([0, 0], [0, 1]), 100)),
+            Condition(&#34;boundary&#34;,
+                      lambda Du: Du[&#34;u_x&#34;],
+                      (Union(Cuboid([0, 0], [1, 0]), Cuboid([0, 1], [1, 1])), 100)),
+            Condition(&#34;inner&#34;,
+                      lambda Du: Du[&#34;u_t&#34;] - 0.125 * Du[&#34;u_xx&#34;],
+                      (Cuboid([0, 0], [1, 1]), 1600),
+                      Equidistant())
+        ]
+
+    @staticmethod
+    def calculate_differentials(model, freeVariables):
+        with tf.GradientTape(persistent=True) as tape:
+            t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
+
+            tape.watch(t)
+            tape.watch(x)
+
+            ipt = tf.stack([t[:, 0], x[:, 0]], axis=1)
+            u = model(ipt)
+
+            u_t = tape.gradient(u, t)
+            u_x = tape.gradient(u, x)
+
+            u_xx = tape.gradient(u_x, x)
+
+        del tape
+
+        return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_xx&#34;: u_xx}
+
+
 class HeatEquation2D(BoundaryValueProblem):
     &#34;&#34;&#34;
     Class defining the 2D heat equation as a boundary value problem.
@@ -259,108 +310,6 @@ class HeatEquation2D(BoundaryValueProblem):
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] - Du[&#34;u_xx&#34;] - Du[&#34;u_yy&#34;],
                       (Cuboid([0, -2, -2], [2, 2, 2]), 3600))
-        ]
-
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        with tf.GradientTape(persistent=True) as tape:
-            t, x, y = freeVariables[:, 0:1], freeVariables[:, 1:2], freeVariables[:, 2:3]
-
-            tape.watch(t)
-            tape.watch(x)
-            tape.watch(y)
-
-            u = model(tf.stack([t[:, 0], x[:, 0], y[:, 0]], axis=1))
-
-            u_t = tape.gradient(u, t)
-            u_x = tape.gradient(u, x)
-            u_y = tape.gradient(u, y)
-
-            u_xx = tape.gradient(u_x, x)
-            u_yy = tape.gradient(u_y, y)
-
-        del tape
-
-        return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;y&#34;: y, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_y&#34;: u_yy, &#34;u_xx&#34;: u_xx, &#34;u_yy&#34;: u_yy}
-
-
-class ControlledHeatEquation1D(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the 1D heat equation as a boundary value problem with an aspect of control. (EXPERIMENTAL)
-
-    (t, x) ⟼ (y, control)
-    &#34;&#34;&#34;
-
-    @classproperty
-    def conditions(cls):
-        return [
-            Condition(&#34;initial&#34;,
-                      lambda Du: Du[&#34;u&#34;],
-                      (Cuboid([0, 0], [0, 1]), 200)),
-            Condition(&#34;control&#34;,
-                      lambda Du: Du[&#34;u&#34;], #- Du[&#34;uR&#34;],
-                      (Cuboid([0, 1], [1, 1]), 200)),
-            Condition(&#34;goal&#34;,
-                      lambda Du: Du[&#34;u&#34;] - tf.exp(-10 * (1 - Du[&#34;x&#34;])**2),
-                      (Cuboid([1, 0], [1, 1]), 200)),
-            # Condition(&#34;boundary&#34;,
-            #           lambda Du: Du[&#34;u_x&#34;],
-            #           (Cuboid([0, 0], [1, 0]), 200), weight=0),
-            Condition(&#34;inner&#34;,
-                      lambda Du: Du[&#34;u_t&#34;] - Du[&#34;u_xx&#34;],
-                      (Cuboid([0, 0], [1, 1]), 16), weight=0)
-        ]
-
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        @tf.function
-        def y(x):
-            return model(x)[:, 0]
-
-        def control(x):
-            return model(x)[:, 1]
-
-        with tf.GradientTape(persistent=True) as tape:
-            t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
-
-            tape.watch(t)
-            tape.watch(x)
-
-            ipt = tf.stack([t[:, 0], x[:, 0]], axis=1)
-            u = y(ipt)
-            #uR = control(ipt)
-
-            u_t = tape.gradient(u, t)
-            u_x = tape.gradient(u, x)
-
-            u_xx = tape.gradient(u_x, x)
-
-        del tape
-
-        return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_xx&#34;: u_xx}#, &#34;uR&#34;: uR}
-
-
-class ControlledHeatEquation2D(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the 2D heat equation as a temporal boundary value problem. (EXPERIMENTAL)
-
-    (t, x, y) ⟼ z
-    &#34;&#34;&#34;
-
-    @classproperty
-    def conditions(cls):
-        return [
-            Condition(&#34;initial&#34;,
-                      lambda Du: Du[&#34;u&#34;] - 0.5,
-                      (Cuboid([0, 0, 0], [0, 1, 1]), 400),
-                      weight=2),
-            Condition(&#34;boundary&#34;,
-                      lambda Du: Du[&#34;u&#34;] - 1,
-                      (Cuboid([5, 1, 0], [5, 1, 1]), 400),
-                      weight=2),
-            Condition(&#34;inner&#34;,
-                      lambda Du: Du[&#34;u_t&#34;] - Du[&#34;u_xx&#34;] - Du[&#34;u_yy&#34;],
-                      (Cuboid([0, 0, 0], [5, 1, 1]), 1600))
         ]
 
     @staticmethod
@@ -404,7 +353,7 @@ class BurgersEquation(BoundaryValueProblem):
                       (Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1])), 200)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] + Du[&#34;u&#34;] * Du[&#34;u_x&#34;] - 0.01 / np.pi * Du[&#34;u_xx&#34;],
-                      (Cuboid([0, -1], [1, 1]), 2000))
+                      (Cuboid([0, -1], [1, 1]), 1600))
         ]
 
     @staticmethod
@@ -531,10 +480,10 @@ class KortewegDeVriesEquation(BoundaryValueProblem):
         return [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.cos(np.pi * Du[&#34;x&#34;]),
-                      (Cuboid([0, -1], [0, 1]), 200), weight=2),
+                      (Cuboid([0, -1], [0, 1]), 500)),
             Condition(&#34;inner&#34;,
-                      lambda Du: Du[&#34;u_t&#34;] + Du[&#34;u&#34;] * Du[&#34;u_x&#34;] + 0.0025 * Du[&#34;u_xxx&#34;],
-                      (Cuboid([0, -1], [1, 1]), 2025))
+                      lambda Du: Du[&#34;u_t&#34;] + 6 * Du[&#34;u&#34;] * Du[&#34;u_x&#34;] + Du[&#34;u_xxx&#34;],
+                      (Cuboid([0, -1], [1, 1]), 2000))
         ]
 
     @staticmethod
@@ -559,9 +508,9 @@ class KortewegDeVriesEquation(BoundaryValueProblem):
         return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_xxx&#34;: u_xxx}
 
 
-class ReactionDiffusionEquation(BoundaryValueProblem):
+class ConvectionDiffusionEquation(BoundaryValueProblem):
     &#34;&#34;&#34;
-    Class defining the Reaction-Diffusion equation as a boundary value problem.
+    Class defining the Convection-Diffusion equation as a boundary value problem.
 
     (t, x) ⟼ y
     &#34;&#34;&#34;
@@ -570,15 +519,11 @@ class ReactionDiffusionEquation(BoundaryValueProblem):
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
-                      lambda Du: Du[&#34;u&#34;] - tf.cos(np.pi / 2 * Du[&#34;x&#34;]) ** 2,
-                      (Cuboid([0, -1], [0, 1]), 200),
-                      weight=5),
-            Condition(&#34;boundary&#34;,
-                      lambda Du: Du[&#34;u_x&#34;],
-                      (Union(Cuboid([0, -1], [1.5, -1]), Cuboid([0, 1], [1.5, 1])), 200)),
+                      lambda Du: Du[&#34;u&#34;] - tf.exp(-25 * Du[&#34;x&#34;]**2),
+                      (Cuboid([0, -0.5], [0, 1]), 100)),
             Condition(&#34;inner&#34;,
-                      lambda Du: Du[&#34;u_t&#34;] - 0.01 * Du[&#34;u_xx&#34;] - 10 * (1 - Du[&#34;u&#34;]) * Du[&#34;u&#34;] * (Du[&#34;u&#34;] - .4),
-                      (Cuboid([0, -1], [1.5, 1]), 3600))
+                      lambda Du: Du[&#34;u_t&#34;] + Du[&#34;u_x&#34;] - 0.1 * Du[&#34;u_xx&#34;],
+                      (Cuboid([0, -0.5], [1, 1]), 1000))
         ]
 
     @staticmethod
@@ -646,128 +591,6 @@ class MinimalSurfaceEquation(BoundaryValueProblem):
         return {&#34;x&#34;: x, &#34;y&#34;: y, &#34;u&#34;: u, &#34;u_x&#34;: u_x, &#34;u_y&#34;: u_y, &#34;u_xy&#34;: u_xy, &#34;u_xx&#34;: u_xx, &#34;u_yy&#34;: u_yy}
 
 
-class FluidEquation2D(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the fluid equation as a boundary value problem. (EXPERIMENTAL)
-
-    (t, x, y) ⟼ (v_x, v_y)
-    &#34;&#34;&#34;
-
-    @classproperty
-    def conditions(cls):
-        def field(x, y):
-            return tf.concat([(1 - x) * x * (1 - y) * y, 0 * x], axis=1)
-
-        def velocity(u, u_x, u_y):
-            return -tf.stack([u[:, 0] * u_x[:, 0] + u[:, 1] * u_y[:, 0], u[:, 0] * u_x[:, 1] + u[:, 1] * u_y[:, 1]],
-                             axis=1)
-
-        return [
-            Condition(&#34;initial&#34;,
-                      lambda Du: Du[&#34;u&#34;] - field(Du[&#34;x&#34;], Du[&#34;y&#34;]),
-                      (Cuboid([0, 0, 0], [0, 1, 1]), 400)),
-            Condition(&#34;inner&#34;,
-                      lambda Du: Du[&#34;u_t&#34;] - velocity(Du[&#34;u&#34;], Du[&#34;u_x&#34;], Du[&#34;u_y&#34;]),
-                      (Cuboid([0, 0, 0], [1, 1, 1]), 900)),
-            Condition(&#34;inner3&#34;,
-                      lambda Du: Du[&#34;ux_x&#34;] + Du[&#34;uy_y&#34;],
-                      (Cuboid([0, 0, 0], [1, 1, 1]), 900)),
-            Condition(&#34;boundary&#34;,
-                      lambda Du: Du[&#34;u&#34;],
-                      (Union(Cuboid([0, 0, 0], [1, 1, 0]), Cuboid([0, 0, 0], [1, 0, 1]),
-                             Cuboid([0, 1, 0], [1, 1, 1]), Cuboid([0, 0, 1], [1, 1, 1])), 900))
-        ]
-
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        def u1(x):
-            return model(x)[:, 0]
-
-        def u2(x):
-            return model(x)[:, 1]
-
-        with tf.GradientTape(persistent=True) as tape:
-            t, x, y = freeVariables[:, 0:1], freeVariables[:, 1:2], freeVariables[:, 2:3]
-
-            tape.watch(t)
-            tape.watch(x)
-            tape.watch(y)
-
-            ipt = tf.stack([t[:, 0], x[:, 0], y[:, 0]], axis=1)
-            ux = u1(ipt)
-            uy = u2(ipt)
-
-            ux_t = tape.gradient(ux, t)
-            ux_x = tape.gradient(ux, x)
-            ux_y = tape.gradient(ux, y)
-
-            uy_t = tape.gradient(uy, t)
-            uy_x = tape.gradient(uy, x)
-            uy_y = tape.gradient(uy, y)
-
-            u = tf.stack([ux, uy], axis=1)
-            u_t = tf.concat([ux_t, uy_t], axis=1)
-            u_x = tf.concat([ux_x, uy_x], axis=1)
-            u_y = tf.concat([ux_y, uy_y], axis=1)
-
-        del tape
-
-        return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;y&#34;: y, &#34;u&#34;: u, &#34;ux&#34;: ux, &#34;uy&#34;: uy, &#34;ux_t&#34;: ux_t, &#34;ux_x&#34;: ux_x, &#34;ux_y&#34;: ux_y,
-                &#34;uy_t&#34;: uy_t,
-                &#34;uy_x&#34;: uy_x, &#34;uy_y&#34;: uy_y, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_y&#34;: u_y}
-
-
-class VectorTest(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining a equation for reconstructing a gradient field. (EXPERIMENTAL)
-
-    (t, x, y) ⟼ (v_x, v_y)
-    &#34;&#34;&#34;
-    @classproperty
-    def conditions(cls):
-        def field(x, y):
-            return -0.25 * tf.exp(-x ** 2 - y ** 2) * tf.concat([x, y], axis=1)
-
-        return [
-            Condition(&#34;initial&#34;,
-                      lambda Du: Du[&#34;u&#34;] - field(Du[&#34;x&#34;], Du[&#34;y&#34;]),
-                      (Cuboid([0, -2, -2], [0, 2, 2]), 1600)),
-            Condition(&#34;inner&#34;,
-                      lambda Du: Du[&#34;u_t&#34;] + Du[&#34;u&#34;] / (1 - Du[&#34;t&#34;]),
-                      (Cuboid([0, -2, -2], [2, 2, 2]), 2700))
-        ]
-
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        def u1(x):
-            return model(x)[:, 0]
-
-        def u2(x):
-            return model(x)[:, 1]
-
-        with tf.GradientTape(persistent=True) as tape:
-            t, x, y = freeVariables[:, 0:1], freeVariables[:, 1:2], freeVariables[:, 2:3]
-
-            tape.watch(t)
-            tape.watch(x)
-            tape.watch(y)
-
-            ipt = tf.stack([t[:, 0], x[:, 0], y[:, 0]], axis=1)
-            ux = u1(ipt)
-            uy = u2(ipt)
-
-            ux_t = tape.gradient(ux, t)
-
-            uy_t = tape.gradient(uy, t)
-
-            u = tf.stack([ux, uy], axis=1)
-            u_t = tf.concat([ux_t, uy_t], axis=1)
-
-        del tape
-
-        return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;y&#34;: y, &#34;u&#34;: u, &#34;u_t&#34;: u_t}
-
-
 class Pendulum(BoundaryValueProblem):
     &#34;&#34;&#34;
     Class defining the differential algebraic equation for a pendulum.
@@ -782,75 +605,6 @@ class Pendulum(BoundaryValueProblem):
 
         def ode(u, t, alpha):
             return -alpha * u - tf.concat([0 * t, 0 * t + 1.5], axis=1)
-
-        return [
-            Condition(&#34;initialPos&#34;,
-                      lambda Du: Du[&#34;u&#34;] - initPos(Du[&#34;t&#34;]),
-                      (Cuboid([0], [0]), 10)),
-            Condition(&#34;initialVel&#34;,
-                      lambda Du: Du[&#34;u_t&#34;],
-                      (Cuboid([0], [0]), 10)),
-            Condition(&#34;ode&#34;,
-                      lambda Du: Du[&#34;u_tt&#34;] - ode(Du[&#34;u&#34;], Du[&#34;t&#34;], Du[&#34;alpha&#34;]),
-                      (Cuboid([0], [10]), 500)),
-            Condition(&#34;constraint&#34;,
-                      lambda Du: tf.norm(Du[&#34;u&#34;], axis=1)**2 - 1.,
-                      (Cuboid([0], [10]), 500))
-        ]
-
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        def u1(x):
-            return model(x)[:, 0]
-
-        def u2(x):
-            return model(x)[:, 1]
-
-        def lagrange(x):
-            return model(x)[:, 2]
-
-
-        with tf.GradientTape(persistent=True) as tape:
-            t = freeVariables[:, 0:1]
-
-            tape.watch(t)
-
-            ux = u1(t)
-            uy = u2(t)
-            alpha = tf.transpose(tf.stack([lagrange(t)]))
-
-            ux_t = tape.gradient(ux, t)
-            uy_t = tape.gradient(uy, t)
-
-            ux_tt = tape.gradient(ux_t, t)
-            uy_tt = tape.gradient(uy_t, t)
-
-            u = tf.stack([ux, uy], axis=1)
-            u_t = tf.concat([ux_t, uy_t], axis=1)
-            u_tt = tf.concat([ux_tt, uy_tt], axis=1)
-
-        del tape
-
-        return {&#34;t&#34;: t, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_tt&#34;: u_tt, &#34;alpha&#34;: alpha}
-
-
-class DoublePendulum(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the differential algebraic equation for a double pendulum.
-
-    t ⟼ (x_1, y_1, x_2, y_2, lambda_1, lambda_2)
-    &#34;&#34;&#34;
-
-    @classproperty
-    def conditions(cls):
-        g = 1.5
-
-        def initPos(t):
-            return tf.concat([0*t + 1, 0*t, 0*t + 1, 0*t - 1], axis=1)
-
-        def ode(t, u1, u2, alpha1, alpha2):
-            return tf.concat * u1 - tf.concat([0*t, 0*t + g, 0*t, 0*t + g], axis=1)
-
 
         return [
             Condition(&#34;initialPos&#34;,
@@ -1032,24 +786,29 @@ class DoublePendulum(BoundaryValueProblem):
         -----------
         tensor: Tensor of differentials
         &#34;&#34;&#34;
-        ...</code></pre>
+        ...
+
+    @classmethod
+    def get_debug_string(cls):
+        debug = &#34;&#34;
+        for cond in cls.conditions:
+            samples = len(cond.sample_points())
+            debug += &#34;%s: %d\t&#34; % (cond.name, samples)
+
+        return debug[:-1]</code></pre>
 </details>
 <h3>Subclasses</h3>
 <ul class="hlist">
 <li><a title="PDESolver.BoundaryValueProblem.AllenCahnEquation" href="#PDESolver.BoundaryValueProblem.AllenCahnEquation">AllenCahnEquation</a></li>
 <li><a title="PDESolver.BoundaryValueProblem.BurgersEquation" href="#PDESolver.BoundaryValueProblem.BurgersEquation">BurgersEquation</a></li>
-<li><a title="PDESolver.BoundaryValueProblem.ControlledHeatEquation1D" href="#PDESolver.BoundaryValueProblem.ControlledHeatEquation1D">ControlledHeatEquation1D</a></li>
-<li><a title="PDESolver.BoundaryValueProblem.ControlledHeatEquation2D" href="#PDESolver.BoundaryValueProblem.ControlledHeatEquation2D">ControlledHeatEquation2D</a></li>
-<li><a title="PDESolver.BoundaryValueProblem.DoublePendulum" href="#PDESolver.BoundaryValueProblem.DoublePendulum">DoublePendulum</a></li>
-<li><a title="PDESolver.BoundaryValueProblem.FluidEquation2D" href="#PDESolver.BoundaryValueProblem.FluidEquation2D">FluidEquation2D</a></li>
+<li><a title="PDESolver.BoundaryValueProblem.ConvectionDiffusionEquation" href="#PDESolver.BoundaryValueProblem.ConvectionDiffusionEquation">ConvectionDiffusionEquation</a></li>
+<li><a title="PDESolver.BoundaryValueProblem.HeatEquation1D" href="#PDESolver.BoundaryValueProblem.HeatEquation1D">HeatEquation1D</a></li>
 <li><a title="PDESolver.BoundaryValueProblem.HeatEquation2D" href="#PDESolver.BoundaryValueProblem.HeatEquation2D">HeatEquation2D</a></li>
 <li><a title="PDESolver.BoundaryValueProblem.KortewegDeVriesEquation" href="#PDESolver.BoundaryValueProblem.KortewegDeVriesEquation">KortewegDeVriesEquation</a></li>
 <li><a title="PDESolver.BoundaryValueProblem.Laplace" href="#PDESolver.BoundaryValueProblem.Laplace">Laplace</a></li>
 <li><a title="PDESolver.BoundaryValueProblem.MinimalSurfaceEquation" href="#PDESolver.BoundaryValueProblem.MinimalSurfaceEquation">MinimalSurfaceEquation</a></li>
 <li><a title="PDESolver.BoundaryValueProblem.Pendulum" href="#PDESolver.BoundaryValueProblem.Pendulum">Pendulum</a></li>
-<li><a title="PDESolver.BoundaryValueProblem.ReactionDiffusionEquation" href="#PDESolver.BoundaryValueProblem.ReactionDiffusionEquation">ReactionDiffusionEquation</a></li>
 <li><a title="PDESolver.BoundaryValueProblem.VanDerPolEquation" href="#PDESolver.BoundaryValueProblem.VanDerPolEquation">VanDerPolEquation</a></li>
-<li><a title="PDESolver.BoundaryValueProblem.VectorTest" href="#PDESolver.BoundaryValueProblem.VectorTest">VectorTest</a></li>
 <li><a title="PDESolver.BoundaryValueProblem.WaveEquation1D" href="#PDESolver.BoundaryValueProblem.WaveEquation1D">WaveEquation1D</a></li>
 <li><a title="PDESolver.BoundaryValueProblem.WaveEquation2D" href="#PDESolver.BoundaryValueProblem.WaveEquation2D">WaveEquation2D</a></li>
 </ul>
@@ -1102,6 +861,25 @@ def calculate_differentials(model, freeVariables):
     ...</code></pre>
 </details>
 </dd>
+<dt id="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_debug_string"><code class="name flex">
+<span>def <span class="ident">get_debug_string</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@classmethod
+def get_debug_string(cls):
+    debug = &#34;&#34;
+    for cond in cls.conditions:
+        samples = len(cond.sample_points())
+        debug += &#34;%s: %d\t&#34; % (cond.name, samples)
+
+    return debug[:-1]</code></pre>
+</details>
+</dd>
 </dl>
 </dd>
 <dt id="PDESolver.BoundaryValueProblem.BurgersEquation"><code class="flex name class">
@@ -1132,7 +910,7 @@ def calculate_differentials(model, freeVariables):
                       (Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1])), 200)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] + Du[&#34;u&#34;] * Du[&#34;u_x&#34;] - 0.01 / np.pi * Du[&#34;u_xx&#34;],
-                      (Cuboid([0, -1], [1, 1]), 2000))
+                      (Cuboid([0, -1], [1, 1]), 1600))
         ]
 
     @staticmethod
@@ -1176,7 +954,7 @@ def calculate_differentials(model, freeVariables):
 </dd>
 <dt id="PDESolver.BoundaryValueProblem.Condition"><code class="flex name class">
 <span>class <span class="ident">Condition</span></span>
-<span>(</span><span>name, residue_fn, region_samples_pair, sampler=&lt;PDESolver.Sampling.Equidistant object&gt;, weight=1)</span>
+<span>(</span><span>name, residue_fn, region_samples_pair, sampler=&lt;PDESolver.Sampling.Random object&gt;, weight=1)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Class for defining conditions for boundary value problems.</p>
@@ -1198,7 +976,7 @@ def calculate_differentials(model, freeVariables):
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class Condition:
-    def __init__(self, name, residue_fn, region_samples_pair, sampler=Equidistant(), weight=1):
+    def __init__(self, name, residue_fn, region_samples_pair, sampler=Random(), weight=1):
         &#34;&#34;&#34;
         Class for defining conditions for boundary value problems.
 
@@ -1267,19 +1045,86 @@ def calculate_differentials(model, freeVariables):
 </dd>
 </dl>
 </dd>
-<dt id="PDESolver.BoundaryValueProblem.ControlledHeatEquation1D"><code class="flex name class">
-<span>class <span class="ident">ControlledHeatEquation1D</span></span>
+<dt id="PDESolver.BoundaryValueProblem.ConvectionDiffusionEquation"><code class="flex name class">
+<span>class <span class="ident">ConvectionDiffusionEquation</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class defining the 1D heat equation as a boundary value problem with an aspect of control. (EXPERIMENTAL)</p>
+<div class="desc"><p>Class defining the Convection-Diffusion equation as a boundary value problem.</p>
+<p>(t, x) ⟼ y</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class ConvectionDiffusionEquation(BoundaryValueProblem):
+    &#34;&#34;&#34;
+    Class defining the Convection-Diffusion equation as a boundary value problem.
+
+    (t, x) ⟼ y
+    &#34;&#34;&#34;
+
+    @classproperty
+    def conditions(cls):
+        return [
+            Condition(&#34;initial&#34;,
+                      lambda Du: Du[&#34;u&#34;] - tf.exp(-25 * Du[&#34;x&#34;]**2),
+                      (Cuboid([0, -0.5], [0, 1]), 100)),
+            Condition(&#34;inner&#34;,
+                      lambda Du: Du[&#34;u_t&#34;] + Du[&#34;u_x&#34;] - 0.1 * Du[&#34;u_xx&#34;],
+                      (Cuboid([0, -0.5], [1, 1]), 1000))
+        ]
+
+    @staticmethod
+    def calculate_differentials(model, freeVariables):
+        with tf.GradientTape(persistent=True) as tape:
+            t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
+
+            tape.watch(t)
+            tape.watch(x)
+
+            u = model(tf.stack([t[:, 0], x[:, 0]], axis=1))
+
+            u_t = tape.gradient(u, t)
+            u_x = tape.gradient(u, x)
+
+            u_xx = tape.gradient(u_x, x)
+
+        del tape
+
+        return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_xx&#34;: u_xx}</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></li>
+</ul>
+<h3>Class variables</h3>
+<dl>
+<dt id="PDESolver.BoundaryValueProblem.ConvectionDiffusionEquation.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></b></code>:
+<ul class="hlist">
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials">calculate_differentials</a></code></li>
+</ul>
+</li>
+</ul>
+</dd>
+<dt id="PDESolver.BoundaryValueProblem.HeatEquation1D"><code class="flex name class">
+<span>class <span class="ident">HeatEquation1D</span></span>
+</code></dt>
+<dd>
+<div class="desc"><p>Class defining the 1D heat equation as a boundary value problem.</p>
 <p>(t, x) ⟼ (y, control)</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">class ControlledHeatEquation1D(BoundaryValueProblem):
+<pre><code class="python">class HeatEquation1D(BoundaryValueProblem):
     &#34;&#34;&#34;
-    Class defining the 1D heat equation as a boundary value problem with an aspect of control. (EXPERIMENTAL)
+    Class defining the 1D heat equation as a boundary value problem.
 
     (t, x) ⟼ (y, control)
     &#34;&#34;&#34;
@@ -1288,31 +1133,19 @@ def calculate_differentials(model, freeVariables):
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
-                      lambda Du: Du[&#34;u&#34;],
-                      (Cuboid([0, 0], [0, 1]), 200)),
-            Condition(&#34;control&#34;,
-                      lambda Du: Du[&#34;u&#34;], #- Du[&#34;uR&#34;],
-                      (Cuboid([0, 1], [1, 1]), 200)),
-            Condition(&#34;goal&#34;,
-                      lambda Du: Du[&#34;u&#34;] - tf.exp(-10 * (1 - Du[&#34;x&#34;])**2),
-                      (Cuboid([1, 0], [1, 1]), 200)),
-            # Condition(&#34;boundary&#34;,
-            #           lambda Du: Du[&#34;u_x&#34;],
-            #           (Cuboid([0, 0], [1, 0]), 200), weight=0),
+                      lambda Du: Du[&#34;u&#34;] - 8*Du[&#34;x&#34;]**2 * (1 - Du[&#34;x&#34;])**2,
+                      (Cuboid([0, 0], [0, 1]), 100)),
+            Condition(&#34;boundary&#34;,
+                      lambda Du: Du[&#34;u_x&#34;],
+                      (Union(Cuboid([0, 0], [1, 0]), Cuboid([0, 1], [1, 1])), 100)),
             Condition(&#34;inner&#34;,
-                      lambda Du: Du[&#34;u_t&#34;] - Du[&#34;u_xx&#34;],
-                      (Cuboid([0, 0], [1, 1]), 16), weight=0)
+                      lambda Du: Du[&#34;u_t&#34;] - 0.125 * Du[&#34;u_xx&#34;],
+                      (Cuboid([0, 0], [1, 1]), 1600),
+                      Equidistant())
         ]
 
     @staticmethod
     def calculate_differentials(model, freeVariables):
-        @tf.function
-        def y(x):
-            return model(x)[:, 0]
-
-        def control(x):
-            return model(x)[:, 1]
-
         with tf.GradientTape(persistent=True) as tape:
             t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
 
@@ -1320,8 +1153,7 @@ def calculate_differentials(model, freeVariables):
             tape.watch(x)
 
             ipt = tf.stack([t[:, 0], x[:, 0]], axis=1)
-            u = y(ipt)
-            #uR = control(ipt)
+            u = model(ipt)
 
             u_t = tape.gradient(u, t)
             u_x = tape.gradient(u, x)
@@ -1330,7 +1162,7 @@ def calculate_differentials(model, freeVariables):
 
         del tape
 
-        return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_xx&#34;: u_xx}#, &#34;uR&#34;: uR}</code></pre>
+        return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_xx&#34;: u_xx}</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
@@ -1338,280 +1170,7 @@ def calculate_differentials(model, freeVariables):
 </ul>
 <h3>Class variables</h3>
 <dl>
-<dt id="PDESolver.BoundaryValueProblem.ControlledHeatEquation1D.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-</dl>
-<h3>Inherited members</h3>
-<ul class="hlist">
-<li><code><b><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></b></code>:
-<ul class="hlist">
-<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials">calculate_differentials</a></code></li>
-</ul>
-</li>
-</ul>
-</dd>
-<dt id="PDESolver.BoundaryValueProblem.ControlledHeatEquation2D"><code class="flex name class">
-<span>class <span class="ident">ControlledHeatEquation2D</span></span>
-</code></dt>
-<dd>
-<div class="desc"><p>Class defining the 2D heat equation as a temporal boundary value problem. (EXPERIMENTAL)</p>
-<p>(t, x, y) ⟼ z</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">class ControlledHeatEquation2D(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the 2D heat equation as a temporal boundary value problem. (EXPERIMENTAL)
-
-    (t, x, y) ⟼ z
-    &#34;&#34;&#34;
-
-    @classproperty
-    def conditions(cls):
-        return [
-            Condition(&#34;initial&#34;,
-                      lambda Du: Du[&#34;u&#34;] - 0.5,
-                      (Cuboid([0, 0, 0], [0, 1, 1]), 400),
-                      weight=2),
-            Condition(&#34;boundary&#34;,
-                      lambda Du: Du[&#34;u&#34;] - 1,
-                      (Cuboid([5, 1, 0], [5, 1, 1]), 400),
-                      weight=2),
-            Condition(&#34;inner&#34;,
-                      lambda Du: Du[&#34;u_t&#34;] - Du[&#34;u_xx&#34;] - Du[&#34;u_yy&#34;],
-                      (Cuboid([0, 0, 0], [5, 1, 1]), 1600))
-        ]
-
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        with tf.GradientTape(persistent=True) as tape:
-            t, x, y = freeVariables[:, 0:1], freeVariables[:, 1:2], freeVariables[:, 2:3]
-
-            tape.watch(t)
-            tape.watch(x)
-            tape.watch(y)
-
-            u = model(tf.stack([t[:, 0], x[:, 0], y[:, 0]], axis=1))
-
-            u_t = tape.gradient(u, t)
-            u_x = tape.gradient(u, x)
-            u_y = tape.gradient(u, y)
-
-            u_xx = tape.gradient(u_x, x)
-            u_yy = tape.gradient(u_y, y)
-
-        del tape
-
-        return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;y&#34;: y, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_y&#34;: u_yy, &#34;u_xx&#34;: u_xx, &#34;u_yy&#34;: u_yy}</code></pre>
-</details>
-<h3>Ancestors</h3>
-<ul class="hlist">
-<li><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></li>
-</ul>
-<h3>Class variables</h3>
-<dl>
-<dt id="PDESolver.BoundaryValueProblem.ControlledHeatEquation2D.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-</dl>
-<h3>Inherited members</h3>
-<ul class="hlist">
-<li><code><b><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></b></code>:
-<ul class="hlist">
-<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials">calculate_differentials</a></code></li>
-</ul>
-</li>
-</ul>
-</dd>
-<dt id="PDESolver.BoundaryValueProblem.DoublePendulum"><code class="flex name class">
-<span>class <span class="ident">DoublePendulum</span></span>
-</code></dt>
-<dd>
-<div class="desc"><p>Class defining the differential algebraic equation for a double pendulum.</p>
-<p>t ⟼ (x_1, y_1, x_2, y_2, lambda_1, lambda_2)</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">class DoublePendulum(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the differential algebraic equation for a double pendulum.
-
-    t ⟼ (x_1, y_1, x_2, y_2, lambda_1, lambda_2)
-    &#34;&#34;&#34;
-
-    @classproperty
-    def conditions(cls):
-        g = 1.5
-
-        def initPos(t):
-            return tf.concat([0*t + 1, 0*t, 0*t + 1, 0*t - 1], axis=1)
-
-        def ode(t, u1, u2, alpha1, alpha2):
-            return tf.concat * u1 - tf.concat([0*t, 0*t + g, 0*t, 0*t + g], axis=1)
-
-
-        return [
-            Condition(&#34;initialPos&#34;,
-                      lambda Du: Du[&#34;u&#34;] - initPos(Du[&#34;t&#34;]),
-                      (Cuboid([0], [0]), 10)),
-            Condition(&#34;initialVel&#34;,
-                      lambda Du: Du[&#34;u_t&#34;],
-                      (Cuboid([0], [0]), 10)),
-            Condition(&#34;ode&#34;,
-                      lambda Du: Du[&#34;u_tt&#34;] - ode(Du[&#34;u&#34;], Du[&#34;t&#34;], Du[&#34;alpha&#34;]),
-                      (Cuboid([0], [10]), 500)),
-            Condition(&#34;constraint&#34;,
-                      lambda Du: tf.norm(Du[&#34;u&#34;], axis=1)**2 - 1.,
-                      (Cuboid([0], [10]), 500))
-        ]
-
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        def u1(x):
-            return model(x)[:, 0]
-
-        def u2(x):
-            return model(x)[:, 1]
-
-        def lagrange(x):
-            return model(x)[:, 2]
-
-
-        with tf.GradientTape(persistent=True) as tape:
-            t = freeVariables[:, 0:1]
-
-            tape.watch(t)
-
-            ux = u1(t)
-            uy = u2(t)
-            alpha = tf.transpose(tf.stack([lagrange(t)]))
-
-            ux_t = tape.gradient(ux, t)
-            uy_t = tape.gradient(uy, t)
-
-            ux_tt = tape.gradient(ux_t, t)
-            uy_tt = tape.gradient(uy_t, t)
-
-            u = tf.stack([ux, uy], axis=1)
-            u_t = tf.concat([ux_t, uy_t], axis=1)
-            u_tt = tf.concat([ux_tt, uy_tt], axis=1)
-
-        del tape
-
-        return {&#34;t&#34;: t, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_tt&#34;: u_tt, &#34;alpha&#34;: alpha}</code></pre>
-</details>
-<h3>Ancestors</h3>
-<ul class="hlist">
-<li><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></li>
-</ul>
-<h3>Class variables</h3>
-<dl>
-<dt id="PDESolver.BoundaryValueProblem.DoublePendulum.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-</dl>
-<h3>Inherited members</h3>
-<ul class="hlist">
-<li><code><b><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></b></code>:
-<ul class="hlist">
-<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials">calculate_differentials</a></code></li>
-</ul>
-</li>
-</ul>
-</dd>
-<dt id="PDESolver.BoundaryValueProblem.FluidEquation2D"><code class="flex name class">
-<span>class <span class="ident">FluidEquation2D</span></span>
-</code></dt>
-<dd>
-<div class="desc"><p>Class defining the fluid equation as a boundary value problem. (EXPERIMENTAL)</p>
-<p>(t, x, y) ⟼ (v_x, v_y)</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">class FluidEquation2D(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the fluid equation as a boundary value problem. (EXPERIMENTAL)
-
-    (t, x, y) ⟼ (v_x, v_y)
-    &#34;&#34;&#34;
-
-    @classproperty
-    def conditions(cls):
-        def field(x, y):
-            return tf.concat([(1 - x) * x * (1 - y) * y, 0 * x], axis=1)
-
-        def velocity(u, u_x, u_y):
-            return -tf.stack([u[:, 0] * u_x[:, 0] + u[:, 1] * u_y[:, 0], u[:, 0] * u_x[:, 1] + u[:, 1] * u_y[:, 1]],
-                             axis=1)
-
-        return [
-            Condition(&#34;initial&#34;,
-                      lambda Du: Du[&#34;u&#34;] - field(Du[&#34;x&#34;], Du[&#34;y&#34;]),
-                      (Cuboid([0, 0, 0], [0, 1, 1]), 400)),
-            Condition(&#34;inner&#34;,
-                      lambda Du: Du[&#34;u_t&#34;] - velocity(Du[&#34;u&#34;], Du[&#34;u_x&#34;], Du[&#34;u_y&#34;]),
-                      (Cuboid([0, 0, 0], [1, 1, 1]), 900)),
-            Condition(&#34;inner3&#34;,
-                      lambda Du: Du[&#34;ux_x&#34;] + Du[&#34;uy_y&#34;],
-                      (Cuboid([0, 0, 0], [1, 1, 1]), 900)),
-            Condition(&#34;boundary&#34;,
-                      lambda Du: Du[&#34;u&#34;],
-                      (Union(Cuboid([0, 0, 0], [1, 1, 0]), Cuboid([0, 0, 0], [1, 0, 1]),
-                             Cuboid([0, 1, 0], [1, 1, 1]), Cuboid([0, 0, 1], [1, 1, 1])), 900))
-        ]
-
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        def u1(x):
-            return model(x)[:, 0]
-
-        def u2(x):
-            return model(x)[:, 1]
-
-        with tf.GradientTape(persistent=True) as tape:
-            t, x, y = freeVariables[:, 0:1], freeVariables[:, 1:2], freeVariables[:, 2:3]
-
-            tape.watch(t)
-            tape.watch(x)
-            tape.watch(y)
-
-            ipt = tf.stack([t[:, 0], x[:, 0], y[:, 0]], axis=1)
-            ux = u1(ipt)
-            uy = u2(ipt)
-
-            ux_t = tape.gradient(ux, t)
-            ux_x = tape.gradient(ux, x)
-            ux_y = tape.gradient(ux, y)
-
-            uy_t = tape.gradient(uy, t)
-            uy_x = tape.gradient(uy, x)
-            uy_y = tape.gradient(uy, y)
-
-            u = tf.stack([ux, uy], axis=1)
-            u_t = tf.concat([ux_t, uy_t], axis=1)
-            u_x = tf.concat([ux_x, uy_x], axis=1)
-            u_y = tf.concat([ux_y, uy_y], axis=1)
-
-        del tape
-
-        return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;y&#34;: y, &#34;u&#34;: u, &#34;ux&#34;: ux, &#34;uy&#34;: uy, &#34;ux_t&#34;: ux_t, &#34;ux_x&#34;: ux_x, &#34;ux_y&#34;: ux_y,
-                &#34;uy_t&#34;: uy_t,
-                &#34;uy_x&#34;: uy_x, &#34;uy_y&#34;: uy_y, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_y&#34;: u_y}</code></pre>
-</details>
-<h3>Ancestors</h3>
-<ul class="hlist">
-<li><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></li>
-</ul>
-<h3>Class variables</h3>
-<dl>
-<dt id="PDESolver.BoundaryValueProblem.FluidEquation2D.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
+<dt id="PDESolver.BoundaryValueProblem.HeatEquation1D.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
@@ -1717,10 +1276,10 @@ def calculate_differentials(model, freeVariables):
         return [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.cos(np.pi * Du[&#34;x&#34;]),
-                      (Cuboid([0, -1], [0, 1]), 200), weight=2),
+                      (Cuboid([0, -1], [0, 1]), 500)),
             Condition(&#34;inner&#34;,
-                      lambda Du: Du[&#34;u_t&#34;] + Du[&#34;u&#34;] * Du[&#34;u_x&#34;] + 0.0025 * Du[&#34;u_xxx&#34;],
-                      (Cuboid([0, -1], [1, 1]), 2025))
+                      lambda Du: Du[&#34;u_t&#34;] + 6 * Du[&#34;u&#34;] * Du[&#34;u_x&#34;] + Du[&#34;u_xxx&#34;],
+                      (Cuboid([0, -1], [1, 1]), 2000))
         ]
 
     @staticmethod
@@ -1784,12 +1343,14 @@ def calculate_differentials(model, freeVariables):
     @classproperty
     def conditions(cls):
         return [
-            Condition(&#34;boundary&#34;,
+            Condition(&#34;zero_boundary&#34;,
                       lambda Du: Du[&#34;u&#34;],
-                      (Union(Cuboid([0, 0], [0, 1]), Cuboid([0, 0], [1, 0]), Cuboid([1, 0], [1, 1]), Cuboid([0, 1], [1, 1])), 100),
-                      weight=5),
+                      (Union(Cuboid([0, 0], [0, 1]), Cuboid([0, 0], [1, 0]), Cuboid([1, 0], [1, 1])), 180)),
+            Condition(&#34;f_boundary&#34;,
+                      lambda Du: Du[&#34;u&#34;] - tf.where(tf.abs(Du[&#34;x&#34;] - 0.5) &lt; 0.25, 1., 0.), #2 * Du[&#34;x&#34;] * (1 - Du[&#34;x&#34;]),
+                      (Cuboid([0, 1], [1, 1]), 400), weight=2),
             Condition(&#34;inner&#34;,
-                      lambda Du: Du[&#34;u_xx&#34;] + Du[&#34;u_yy&#34;] - Du[&#34;u&#34;]**3 + Du[&#34;u&#34;] + 10 * Du[&#34;x&#34;]*Du[&#34;y&#34;],
+                      lambda Du: Du[&#34;u_xx&#34;] + Du[&#34;u_yy&#34;],
                       (Cuboid([0, 0], [1, 1]), 1600))
         ]
 
@@ -2002,77 +1563,6 @@ def calculate_differentials(model, freeVariables):
 </li>
 </ul>
 </dd>
-<dt id="PDESolver.BoundaryValueProblem.ReactionDiffusionEquation"><code class="flex name class">
-<span>class <span class="ident">ReactionDiffusionEquation</span></span>
-</code></dt>
-<dd>
-<div class="desc"><p>Class defining the Reaction-Diffusion equation as a boundary value problem.</p>
-<p>(t, x) ⟼ y</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">class ReactionDiffusionEquation(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the Reaction-Diffusion equation as a boundary value problem.
-
-    (t, x) ⟼ y
-    &#34;&#34;&#34;
-
-    @classproperty
-    def conditions(cls):
-        return [
-            Condition(&#34;initial&#34;,
-                      lambda Du: Du[&#34;u&#34;] - tf.cos(np.pi / 2 * Du[&#34;x&#34;]) ** 2,
-                      (Cuboid([0, -1], [0, 1]), 200),
-                      weight=5),
-            Condition(&#34;boundary&#34;,
-                      lambda Du: Du[&#34;u_x&#34;],
-                      (Union(Cuboid([0, -1], [1.5, -1]), Cuboid([0, 1], [1.5, 1])), 200)),
-            Condition(&#34;inner&#34;,
-                      lambda Du: Du[&#34;u_t&#34;] - 0.01 * Du[&#34;u_xx&#34;] - 10 * (1 - Du[&#34;u&#34;]) * Du[&#34;u&#34;] * (Du[&#34;u&#34;] - .4),
-                      (Cuboid([0, -1], [1.5, 1]), 3600))
-        ]
-
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        with tf.GradientTape(persistent=True) as tape:
-            t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
-
-            tape.watch(t)
-            tape.watch(x)
-
-            u = model(tf.stack([t[:, 0], x[:, 0]], axis=1))
-
-            u_t = tape.gradient(u, t)
-            u_x = tape.gradient(u, x)
-
-            u_xx = tape.gradient(u_x, x)
-
-        del tape
-
-        return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_xx&#34;: u_xx}</code></pre>
-</details>
-<h3>Ancestors</h3>
-<ul class="hlist">
-<li><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></li>
-</ul>
-<h3>Class variables</h3>
-<dl>
-<dt id="PDESolver.BoundaryValueProblem.ReactionDiffusionEquation.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-</dl>
-<h3>Inherited members</h3>
-<ul class="hlist">
-<li><code><b><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></b></code>:
-<ul class="hlist">
-<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials">calculate_differentials</a></code></li>
-</ul>
-</li>
-</ul>
-</dd>
 <dt id="PDESolver.BoundaryValueProblem.VanDerPolEquation"><code class="flex name class">
 <span>class <span class="ident">VanDerPolEquation</span></span>
 </code></dt>
@@ -2145,86 +1635,6 @@ def calculate_differentials(model, freeVariables):
 </li>
 </ul>
 </dd>
-<dt id="PDESolver.BoundaryValueProblem.VectorTest"><code class="flex name class">
-<span>class <span class="ident">VectorTest</span></span>
-</code></dt>
-<dd>
-<div class="desc"><p>Class defining a equation for reconstructing a gradient field. (EXPERIMENTAL)</p>
-<p>(t, x, y) ⟼ (v_x, v_y)</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">class VectorTest(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining a equation for reconstructing a gradient field. (EXPERIMENTAL)
-
-    (t, x, y) ⟼ (v_x, v_y)
-    &#34;&#34;&#34;
-    @classproperty
-    def conditions(cls):
-        def field(x, y):
-            return -0.25 * tf.exp(-x ** 2 - y ** 2) * tf.concat([x, y], axis=1)
-
-        return [
-            Condition(&#34;initial&#34;,
-                      lambda Du: Du[&#34;u&#34;] - field(Du[&#34;x&#34;], Du[&#34;y&#34;]),
-                      (Cuboid([0, -2, -2], [0, 2, 2]), 1600)),
-            Condition(&#34;inner&#34;,
-                      lambda Du: Du[&#34;u_t&#34;] + Du[&#34;u&#34;] / (1 - Du[&#34;t&#34;]),
-                      (Cuboid([0, -2, -2], [2, 2, 2]), 2700))
-        ]
-
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        def u1(x):
-            return model(x)[:, 0]
-
-        def u2(x):
-            return model(x)[:, 1]
-
-        with tf.GradientTape(persistent=True) as tape:
-            t, x, y = freeVariables[:, 0:1], freeVariables[:, 1:2], freeVariables[:, 2:3]
-
-            tape.watch(t)
-            tape.watch(x)
-            tape.watch(y)
-
-            ipt = tf.stack([t[:, 0], x[:, 0], y[:, 0]], axis=1)
-            ux = u1(ipt)
-            uy = u2(ipt)
-
-            ux_t = tape.gradient(ux, t)
-
-            uy_t = tape.gradient(uy, t)
-
-            u = tf.stack([ux, uy], axis=1)
-            u_t = tf.concat([ux_t, uy_t], axis=1)
-
-        del tape
-
-        return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;y&#34;: y, &#34;u&#34;: u, &#34;u_t&#34;: u_t}</code></pre>
-</details>
-<h3>Ancestors</h3>
-<ul class="hlist">
-<li><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></li>
-</ul>
-<h3>Class variables</h3>
-<dl>
-<dt id="PDESolver.BoundaryValueProblem.VectorTest.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-</dl>
-<h3>Inherited members</h3>
-<ul class="hlist">
-<li><code><b><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></b></code>:
-<ul class="hlist">
-<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials">calculate_differentials</a></code></li>
-</ul>
-</li>
-</ul>
-</dd>
 <dt id="PDESolver.BoundaryValueProblem.WaveEquation1D"><code class="flex name class">
 <span>class <span class="ident">WaveEquation1D</span></span>
 </code></dt>
@@ -2246,17 +1656,14 @@ def calculate_differentials(model, freeVariables):
     def conditions(cls):
         return [
             Condition(&#34;initial&#34;,
-                      lambda Du: Du[&#34;u&#34;] - tf.sin(np.pi * Du[&#34;x&#34;]),
-                      (Cuboid([0, -1], [0, 1]), 50)),
+                      lambda Du: Du[&#34;u&#34;] - 1 / (200*(Du[&#34;x&#34;] + 0.5)**2 + 1) - 1 / (200*(Du[&#34;x&#34;] - 0.5)**2 + 2),
+                      (Cuboid([0, -1], [0, 1]), 100), weight=2),
             Condition(&#34;boundary1&#34;,
                       lambda Du: Du[&#34;u_t&#34;],
-                      (Cuboid([0, -1], [0, 1]), 50)),
-            Condition(&#34;boundary2&#34;,
-                      lambda Du: Du[&#34;u&#34;],
-                      (Union(Cuboid([0, -1], [2, -1]), Cuboid([0, 1], [2, 1])), 100)),
+                      (Cuboid([0, -1], [0, 1]), 100), weight=2),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_tt&#34;] - Du[&#34;u_xx&#34;],
-                      (Cuboid([0, -1], [2, 1]), 1000))
+                      (Cuboid([0, -1], [1, 1]), 900))
         ]
 
     @staticmethod
@@ -2416,6 +1823,7 @@ def calculate_differentials(model, freeVariables):
 <ul class="">
 <li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials">calculate_differentials</a></code></li>
 <li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.conditions" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.conditions">conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_debug_string" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_debug_string">get_debug_string</a></code></li>
 </ul>
 </li>
 <li>
@@ -2431,27 +1839,15 @@ def calculate_differentials(model, freeVariables):
 </ul>
 </li>
 <li>
-<h4><code><a title="PDESolver.BoundaryValueProblem.ControlledHeatEquation1D" href="#PDESolver.BoundaryValueProblem.ControlledHeatEquation1D">ControlledHeatEquation1D</a></code></h4>
+<h4><code><a title="PDESolver.BoundaryValueProblem.ConvectionDiffusionEquation" href="#PDESolver.BoundaryValueProblem.ConvectionDiffusionEquation">ConvectionDiffusionEquation</a></code></h4>
 <ul class="">
-<li><code><a title="PDESolver.BoundaryValueProblem.ControlledHeatEquation1D.conditions" href="#PDESolver.BoundaryValueProblem.ControlledHeatEquation1D.conditions">conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.ConvectionDiffusionEquation.conditions" href="#PDESolver.BoundaryValueProblem.ConvectionDiffusionEquation.conditions">conditions</a></code></li>
 </ul>
 </li>
 <li>
-<h4><code><a title="PDESolver.BoundaryValueProblem.ControlledHeatEquation2D" href="#PDESolver.BoundaryValueProblem.ControlledHeatEquation2D">ControlledHeatEquation2D</a></code></h4>
+<h4><code><a title="PDESolver.BoundaryValueProblem.HeatEquation1D" href="#PDESolver.BoundaryValueProblem.HeatEquation1D">HeatEquation1D</a></code></h4>
 <ul class="">
-<li><code><a title="PDESolver.BoundaryValueProblem.ControlledHeatEquation2D.conditions" href="#PDESolver.BoundaryValueProblem.ControlledHeatEquation2D.conditions">conditions</a></code></li>
-</ul>
-</li>
-<li>
-<h4><code><a title="PDESolver.BoundaryValueProblem.DoublePendulum" href="#PDESolver.BoundaryValueProblem.DoublePendulum">DoublePendulum</a></code></h4>
-<ul class="">
-<li><code><a title="PDESolver.BoundaryValueProblem.DoublePendulum.conditions" href="#PDESolver.BoundaryValueProblem.DoublePendulum.conditions">conditions</a></code></li>
-</ul>
-</li>
-<li>
-<h4><code><a title="PDESolver.BoundaryValueProblem.FluidEquation2D" href="#PDESolver.BoundaryValueProblem.FluidEquation2D">FluidEquation2D</a></code></h4>
-<ul class="">
-<li><code><a title="PDESolver.BoundaryValueProblem.FluidEquation2D.conditions" href="#PDESolver.BoundaryValueProblem.FluidEquation2D.conditions">conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.HeatEquation1D.conditions" href="#PDESolver.BoundaryValueProblem.HeatEquation1D.conditions">conditions</a></code></li>
 </ul>
 </li>
 <li>
@@ -2485,21 +1881,9 @@ def calculate_differentials(model, freeVariables):
 </ul>
 </li>
 <li>
-<h4><code><a title="PDESolver.BoundaryValueProblem.ReactionDiffusionEquation" href="#PDESolver.BoundaryValueProblem.ReactionDiffusionEquation">ReactionDiffusionEquation</a></code></h4>
-<ul class="">
-<li><code><a title="PDESolver.BoundaryValueProblem.ReactionDiffusionEquation.conditions" href="#PDESolver.BoundaryValueProblem.ReactionDiffusionEquation.conditions">conditions</a></code></li>
-</ul>
-</li>
-<li>
 <h4><code><a title="PDESolver.BoundaryValueProblem.VanDerPolEquation" href="#PDESolver.BoundaryValueProblem.VanDerPolEquation">VanDerPolEquation</a></code></h4>
 <ul class="">
 <li><code><a title="PDESolver.BoundaryValueProblem.VanDerPolEquation.conditions" href="#PDESolver.BoundaryValueProblem.VanDerPolEquation.conditions">conditions</a></code></li>
-</ul>
-</li>
-<li>
-<h4><code><a title="PDESolver.BoundaryValueProblem.VectorTest" href="#PDESolver.BoundaryValueProblem.VectorTest">VectorTest</a></code></h4>
-<ul class="">
-<li><code><a title="PDESolver.BoundaryValueProblem.VectorTest.conditions" href="#PDESolver.BoundaryValueProblem.VectorTest.conditions">conditions</a></code></li>
 </ul>
 </li>
 <li>
