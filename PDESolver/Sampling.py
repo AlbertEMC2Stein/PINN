@@ -51,8 +51,6 @@ class Cuboid(Region):
             Coordinates of the second corner
         """
 
-        self.corner1 = corner1
-        self.corner2 = corner2
         super().__init__()
         self.corner1 = np.array(corner1)
         self.corner2 = np.array(corner2)

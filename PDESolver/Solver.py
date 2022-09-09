@@ -37,6 +37,7 @@ class Solver:
         self.model = model
         self.bvp = bvp
         self.loss_history = []
+        self.time = 0
 
     def train(self, optimizer, lr_scheduler, iterations=10000):
         """
@@ -88,6 +89,7 @@ class Solver:
             self.loss_history += [loss.numpy()]
 
             if i % 50 == 0:
-                print('\rIt {:05d}: loss = {:10.8e} lr = {:.5f}'.format(i, loss, lr_scheduler(i)), end="")
+                print('\rIt {:05d}/{:05d}: loss = {:10.8e} lr = {:.5f}'.format(i, iterations, loss, lr_scheduler(i)), end="")
 
-        print('\nComputation time: {:.1f} seconds'.format(time() - t0))
+        self.time = time() - t0
+        print('\nComputation time: {:.1f} seconds'.format(self.time))
