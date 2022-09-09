@@ -136,6 +136,23 @@ The package can now be imported into any Python scripts running inside this virt
 
 _For usage examples, please refer to the [provided scripts](https://github.com/AlbertEMC2Stein/PINN/tree/main/scripts)_
 
+### Example results
+#### Solutions to the 1D wave equation
+![WaveEquation in 1D (I)](Results/WaveEquation_1D_V1.png)
+![WaveEquation in 1D (II)](Results/WaveEquation_1D_V2.png)
+
+#### Solution to the 2D wave equation
+![WaveEquation in 2D](Results/WaveEquation_2D.gif)
+
+#### Solution to the Allen-Cahn equation 
+![Parametrised Van-Der-Pol](Results/AllenCahnEquation.png)
+
+#### Solution to the Van-Der-Pol equation with varying parameter
+![Parametrised Van-Der-Pol](Results/VanDerPol.png)
+
+#### Solution to the simple pendulum DAE
+![Pendulum](Results/Pendulum.gif)
+
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 
