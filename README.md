@@ -95,18 +95,20 @@ The `PDESolver` is available as a Python package that can be installed and used 
 We are going to use the [`venv`](https://docs.python.org/3/library/venv.html) package for creating a lightweight virtual environment. Create an empty virtualenv with:
 
 ```
-python3 -m venv venv
+python -m venv myvenv     (Mac/Linux)
+py -m venv myvenv         (Windows)
 ```
 
-Here, the second `venv` is the name of the virtual environment. You can replace it with any name of your choice with full path, e.g., use `~/Desktop/myenv` to create a virtualenv called `myenv` in the `Desktop` folder. If the command fails to run, you might need to install the `venv` package itself first using `pip3 install virtualenv`.
+Here, `myvenv` is the name of the virtual environment. You can replace it with any name of your choice with full path, e.g., use `~/Desktop/testing` to create a virtualenv called `testing` in the `Desktop` folder. If the command fails to run, you might need to install the `venv` package itself first using `pip install virtualenv` (Mac/Linux) or `py -m pip install virtualenv` (Windows).
 
-Once the virtual environment is created, activate it with:
+Once the virtual environment is created, activate it with
 
 ```
-source venv/bin/activate
+source path/myvenv/bin/activate     (Mac/Linux)
+path/myvenv/Scripts/activat         (Windows)
 ```
 
-where `venv` is the name of the virtualenv. Now, you can install and test the `PDESolver` package inside this environment.
+where `path` is the path to the venv. Now, you can install and test the `PDESolver` package inside this environment.
 
 
 ### Install the `PDESolver` package
@@ -120,10 +122,11 @@ git clone https://github.com/AlbertEMC2Stein/PINN
 and then compile it by running
 
 ```
-pip3 install -e .
+pip install -e .           (Mac/Linux)
+py -m pip install -e .     (Windows)
 ```
 
-from within the cloned directory (`cd PINN`). This would download all the package dependencies which might take a minute. If there is an error locating any of the dependencies, make sure you are using Python 3.7+. You can also try upgrading your `pip` to the latest version by running `pip3 install --upgrade pip`.
+from within the cloned directory (`cd PINN`). This would download all the package dependencies which might take a minute. If there is an error locating any of the dependencies, make sure you are using Python 3.7+. You can also try upgrading your `pip` to the latest version by running `pip install --upgrade pip` (Mac/Linux) or `py - m pip install --upgrade pip` (Windows).
 
 The package can now be imported into any Python scripts running inside this virtual environment. See the `scripts/` folder for some examples to get you started.
 
