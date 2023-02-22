@@ -1,6 +1,5 @@
 
 import os
-import sys
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
@@ -50,7 +49,7 @@ class Solver:
         """
         Trains the neural network to solve the boundary value problem.
 
-        Parameters
+        Parametersones
         -----------
         optimizer: optimizer
             Optimizer to use for training
@@ -64,12 +63,14 @@ class Solver:
             pde_gradient = tf.concat([tf.reshape(gradients[0][2*j], [-1]) for j in range(len(self.model.layers) - 1)], axis=0)
             data_gradient = tf.concat([tf.reshape(gradients[1][2*j], [-1]) for j in range(len(self.model.layers) - 1)], axis=0)
             new_weight = tf.reduce_max(tf.abs(pde_gradient)) / (tf.reduce_mean(tf.abs(data_gradient)))
-
+            
+            result = None
             for i, cond in enumerate(self.bvp.conditions):
                 if cond.name != 'inner':
-                    self.weights[i] = 0.5 * self.weights[i] + 0.5 * new_weight
-                    #self.weight_history += [cond.weight]
-                    #tf.print('\nCondition weight: ', cond.weight)
+                    result = 0.5 * self.weights[i] + 0.5 * new_weight
+                    self.weights[i].assign(result)
+                    
+            return result
 
         def compute_losses():
             criterion = tf.keras.losses.Huber()
@@ -82,7 +83,7 @@ class Solver:
                     pdeloss += self.weights[i] * criterion(out, 0)
                 else:
                     dataloss += self.weights[i] * criterion(out, 0)
-                    #tf.print('Condition weight (in Loss): ', cond.weight)
+                    tf.print("Weight: ", self.weights[i])
 
             return pdeloss, dataloss
 
@@ -102,26 +103,27 @@ class Solver:
 
         @tf.function
         def train_step():
-            if self.weights == None:
-                self.weights = tf.ones(len(self.bvp.conditions))
+            if self.weights is None:
+                self.weights = tf.Variable(np.ones(len(self.bvp.conditions)), dtype=tf.float32)
             
             # Compute current loss and gradient w.r.t. parameters
             loss, gradients = get_gradients()
-            adjust_weights(gradients)
+            new_weight = adjust_weights(gradients)
             
             # Perform gradient descent step and update condition weights
             optimizer.apply_gradients(zip(gradients[2], self.model.trainable_variables))
             
-            return loss, gradients
+            return loss, gradients, new_weight
 
         pbar = tqdm(range(iterations), desc='Pending...')
         for i in pbar:
-            loss, gradients = train_step()
+            loss, gradients, new_weight = train_step()
             
             self.loss_history += [loss.numpy()]
+            self.weight_history += [new_weight.numpy()]
             pbar.desc = 'loss = {:10.8e} lr = {:.5f}'.format(loss, lr_scheduler(i))
 
-            if i % 5000 == 0:
+            if i % 1000 == 0:
                 _, axs = plt.subplots(1, len(self.model.layers) - 1, figsize=(16, 4))
                 for j in range(len(self.model.layers) - 1):
                     xs = np.linspace(-2, 2, 1000)
