@@ -1,6 +1,11 @@
+
 import os
-from time import time
+import sys
 import tensorflow as tf
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.stats import gaussian_kde
+from tqdm import tqdm
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -37,7 +42,9 @@ class Solver:
         self.model = model
         self.bvp = bvp
         self.loss_history = []
-        self.time = 0
+        self.weight_history = []
+        self.weights = None
+        
 
     def train(self, optimizer, lr_scheduler, iterations=10000):
         """
@@ -53,43 +60,86 @@ class Solver:
             Number of iterations to train for
         """
 
-        def compute_loss():
+        def adjust_weights(gradients):
+            pde_gradient = tf.concat([tf.reshape(gradients[0][2*j], [-1]) for j in range(len(self.model.layers) - 1)], axis=0)
+            data_gradient = tf.concat([tf.reshape(gradients[1][2*j], [-1]) for j in range(len(self.model.layers) - 1)], axis=0)
+            new_weight = tf.reduce_max(tf.abs(pde_gradient)) / (tf.reduce_mean(tf.abs(data_gradient)))
+
+            for i, cond in enumerate(self.bvp.conditions):
+                if cond.name != 'inner':
+                    self.weights[i] = 0.5 * self.weights[i] + 0.5 * new_weight
+                    #self.weight_history += [cond.weight]
+                    #tf.print('\nCondition weight: ', cond.weight)
+
+        def compute_losses():
             criterion = tf.keras.losses.Huber()
 
-            loss = 0
-            for cond in self.bvp.conditions:
+            pdeloss = 0
+            dataloss = 0
+            for i, cond in enumerate(self.bvp.conditions):
                 out = cond(self.model, self.bvp)
-                loss += cond.weight * criterion(out, 0)
+                if cond.name == 'inner':
+                    pdeloss += self.weights[i] * criterion(out, 0)
+                else:
+                    dataloss += self.weights[i] * criterion(out, 0)
+                    #tf.print('Condition weight (in Loss): ', cond.weight)
 
-            return loss
+            return pdeloss, dataloss
 
-        def get_grad():
+        def get_gradients():
             with tf.GradientTape(persistent=True) as tape:
                 tape.watch(self.model.trainable_variables)
-                loss = compute_loss()
+                pdeloss, dataloss = compute_losses()
+                totalloss = pdeloss + dataloss
 
-            g = tape.gradient(loss, self.model.trainable_variables)
+            pdegrad = tape.gradient(pdeloss, self.model.trainable_variables)
+            datagrad = tape.gradient(dataloss, self.model.trainable_variables)
+            totalgrad = tape.gradient(totalloss, self.model.trainable_variables)
+
             del tape
 
-            return loss, g
+            return totalloss, (pdegrad, datagrad, totalgrad)
 
         @tf.function
         def train_step():
+            if self.weights == None:
+                self.weights = tf.ones(len(self.bvp.conditions))
+            
             # Compute current loss and gradient w.r.t. parameters
-            loss, grad_theta = get_grad()
+            loss, gradients = get_gradients()
+            adjust_weights(gradients)
+            
+            # Perform gradient descent step and update condition weights
+            optimizer.apply_gradients(zip(gradients[2], self.model.trainable_variables))
+            
+            return loss, gradients
 
-            # Perform gradient descent step
-            optimizer.apply_gradients(zip(grad_theta, self.model.trainable_variables))
-
-            return loss
-
-        t0 = time()
-        for i in range(iterations + 1):
-            loss = train_step()
+        pbar = tqdm(range(iterations), desc='Pending...')
+        for i in pbar:
+            loss, gradients = train_step()
+            
             self.loss_history += [loss.numpy()]
+            pbar.desc = 'loss = {:10.8e} lr = {:.5f}'.format(loss, lr_scheduler(i))
 
-            if i % 50 == 0:
-                print('\rIt {:05d}/{:05d}: loss = {:10.8e} lr = {:.5f}'.format(i, iterations, loss, lr_scheduler(i)), end="")
+            if i % 5000 == 0:
+                _, axs = plt.subplots(1, len(self.model.layers) - 1, figsize=(16, 4))
+                for j in range(len(self.model.layers) - 1):
+                    xs = np.linspace(-2, 2, 1000)
+                    density = gaussian_kde(gradients[0][2*j].numpy().flatten())
+                    axs[j].plot(xs, density(xs), 'orange', lw=0.5, label='PDE')
 
-        self.time = time() - t0
-        print('\nComputation time: {:.1f} seconds'.format(self.time))
+                    density = gaussian_kde(gradients[1][2*j].numpy().flatten())
+                    axs[j].plot(xs, density(xs), 'b--', lw=0.5, label='Data')
+
+                    axs[j].set_xlim(-2, 2)
+                    axs[j].set_ylim(0, 100)
+                    axs[j].set_yscale('symlog')
+                    axs[j].set_title('Layer {}'.format(j + 1))
+                    axs[j].legend()
+
+                plt.show()
+ 
+                plt.plot(self.weight_history)
+                plt.xlabel('Update')
+                plt.ylabel('Weight')
+                plt.show() 

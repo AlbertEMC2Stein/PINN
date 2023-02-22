@@ -1,5 +1,5 @@
 from PDESolver.Sampling import *
-import tensorflow as tf
+
 
 class classproperty(object):
     def __init__(self, fget):
@@ -10,7 +10,7 @@ class classproperty(object):
 
 
 class Condition:
-    def __init__(self, name, residue_fn, region_samples_pair, sampler=Random()):
+    def __init__(self, name, residue_fn, region_samples_pair, sampler=Random(), weight=1):
         """
         Class for defining conditions for boundary value problems.
 
@@ -32,7 +32,8 @@ class Condition:
         self.residue_fn = residue_fn
         self.sample_points = lambda: region_samples_pair[0].pick(region_samples_pair[1], sampler)
         self._region = region_samples_pair[0]
-        
+        self.weight = weight
+
     def __call__(self, model, bvp):
         Du = bvp.calculate_differentials(model, self.sample_points())
         return self.residue_fn(Du)
@@ -109,7 +110,7 @@ class Laplace(BoundaryValueProblem):
                       (Union(Cuboid([0, 0], [0, 1]), Cuboid([0, 0], [1, 0]), Cuboid([1, 0], [1, 1])), 180)),
             Condition("f_boundary",
                       lambda Du: Du["u"] - tf.where(tf.abs(Du["x"] - 0.5) < 0.25, 1., 0.), #2 * Du["x"] * (1 - Du["x"]),
-                      (Cuboid([0, 1], [1, 1]), 400)),
+                      (Cuboid([0, 1], [1, 1]), 400), weight=2),
             Condition("inner",
                       lambda Du: Du["u_xx"] + Du["u_yy"],
                       (Cuboid([0, 0], [1, 1]), 1600))
@@ -148,10 +149,10 @@ class WaveEquation1D(BoundaryValueProblem):
         return [
             Condition("initial",
                       lambda Du: Du["u"] - 1 / (200*(Du["x"] + 0.5)**2 + 1) - 1 / (200*(Du["x"] - 0.5)**2 + 2),
-                      (Cuboid([0, -1], [0, 1]), 100)),
+                      (Cuboid([0, -1], [0, 1]), 100), weight=2),
             Condition("boundary1",
                       lambda Du: Du["u_t"],
-                      (Cuboid([0, -1], [0, 1]), 100)),
+                      (Cuboid([0, -1], [0, 1]), 100), weight=2),
             Condition("inner",
                       lambda Du: Du["u_tt"] - Du["u_xx"],
                       (Cuboid([0, -1], [1, 1]), 900))

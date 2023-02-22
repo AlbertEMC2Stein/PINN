@@ -13,7 +13,7 @@ class Oscillator(BoundaryValueProblem):
                       (Cuboid([1, 0], [2, 0]), 50)),
             Condition("inner",
                       lambda Du: Du["u_xx"] + Du["t"] * Du["u"],
-                      (Cuboid([1, 0], [2, 6.283]), 2500))
+                      (Cuboid([1, 0], [2, 6.283]), 1600))
         ]
 
     @staticmethod
@@ -33,11 +33,13 @@ class Oscillator(BoundaryValueProblem):
 
 
 # Number of iterations
-N = 10000
+N = 2000
+lr_init = 0.01
+lr_end = 0.001
 
 # Initialize solver, learning rate scheduler and choose optimizer
-solver = Solver(Oscillator, num_inputs=2, num_outputs=1, num_hidden_layers=4, num_neurons_per_layer=16)
-lr = tf.keras.optimizers.schedules.PolynomialDecay(0.01, N, 1e-5, 2)
+solver = Solver(Oscillator, num_inputs=2, num_outputs=1, num_hidden_layers=4, num_neurons_per_layer=50)
+lr = tf.keras.optimizers.schedules.ExponentialDecay(lr_init, decay_steps=N, decay_rate=lr_end / lr_init)
 optim = tf.keras.optimizers.Adam(learning_rate=lr)
 
 # Train model and plot results
@@ -62,7 +64,7 @@ ax.plot_surface(T, X, U, cmap='viridis')
 for t in np.linspace(1, 2, 10):
     x = np.linspace(0, 6.283, 500)
     y = [t] * 500
-    z = np.cos(t * x)
+    z = np.cos(np.sqrt(t) * x)
     ax.plot(y, x, z, c='r')
 
 ax.view_init(35, 35)

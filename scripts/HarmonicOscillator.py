@@ -33,7 +33,7 @@ class HarmonicOscillator(BoundaryValueProblem):
 
 
 # Number of iterations
-N = 2000
+N = 40000
 
 # Initialize solver, learning rate scheduler and choose optimizer
 solver = Solver(HarmonicOscillator, num_inputs=1, num_outputs=1, num_hidden_layers=2, num_neurons_per_layer=25)
