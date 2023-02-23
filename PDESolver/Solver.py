@@ -49,7 +49,7 @@ class Solver:
         """
         Trains the neural network to solve the boundary value problem.
 
-        Parametersones
+        Parameters
         -----------
         optimizer: optimizer
             Optimizer to use for training
@@ -67,7 +67,7 @@ class Solver:
             result = None
             for i, cond in enumerate(self.bvp.conditions):
                 if cond.name != 'inner':
-                    result = 0.5 * self.weights[i] + 0.5 * new_weight
+                    result = 0.25 * self.weights[i] + 0.75 * tf.maximum(1.0, new_weight)
                     self.weights[i].assign(result)
                     
             return result
@@ -83,7 +83,6 @@ class Solver:
                     pdeloss += self.weights[i] * criterion(out, 0)
                 else:
                     dataloss += self.weights[i] * criterion(out, 0)
-                    tf.print("Weight: ", self.weights[i])
 
             return pdeloss, dataloss
 
@@ -109,7 +108,7 @@ class Solver:
             # Compute current loss and gradient w.r.t. parameters
             loss, gradients = get_gradients()
             new_weight = adjust_weights(gradients)
-            
+                
             # Perform gradient descent step and update condition weights
             optimizer.apply_gradients(zip(gradients[2], self.model.trainable_variables))
             
@@ -123,7 +122,7 @@ class Solver:
             self.weight_history += [new_weight.numpy()]
             pbar.desc = 'loss = {:10.8e} lr = {:.5f}'.format(loss, lr_scheduler(i))
 
-            if i % 1000 == 0:
+            if i % 250000 == 0:
                 _, axs = plt.subplots(1, len(self.model.layers) - 1, figsize=(16, 4))
                 for j in range(len(self.model.layers) - 1):
                     xs = np.linspace(-2, 2, 1000)

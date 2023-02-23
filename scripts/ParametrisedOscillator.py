@@ -12,8 +12,8 @@ class Oscillator(BoundaryValueProblem):
                       lambda Du: Du["u_x"],
                       (Cuboid([1, 0], [2, 0]), 50)),
             Condition("inner",
-                      lambda Du: Du["u_xx"] + Du["t"] * Du["u"],
-                      (Cuboid([1, 0], [2, 6.283]), 1600))
+                      lambda Du: Du["u_xx"] + Du["t"]**2 * Du["u"],
+                      (Cuboid([1, 0], [2, 6.283]), 900))
         ]
 
     @staticmethod
@@ -33,9 +33,9 @@ class Oscillator(BoundaryValueProblem):
 
 
 # Number of iterations
-N = 2000
+N = 20000
 lr_init = 0.01
-lr_end = 0.001
+lr_end = 0.000001
 
 # Initialize solver, learning rate scheduler and choose optimizer
 solver = Solver(Oscillator, num_inputs=2, num_outputs=1, num_hidden_layers=4, num_neurons_per_layer=50)
@@ -64,7 +64,7 @@ ax.plot_surface(T, X, U, cmap='viridis')
 for t in np.linspace(1, 2, 10):
     x = np.linspace(0, 6.283, 500)
     y = [t] * 500
-    z = np.cos(np.sqrt(t) * x)
+    z = np.cos(t * x)
     ax.plot(y, x, z, c='r')
 
 ax.view_init(35, 35)
