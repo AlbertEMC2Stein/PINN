@@ -264,3 +264,36 @@ def plot_phaseplot(solver):
     _outFolderExists()
     _plot_loss(solver)
     animate_solution()
+
+
+def debug_plot_2D(solver, variables, domain):
+    N = 1000
+    xspace = np.linspace(domain[0], domain[1], N + 1)
+    yspace = np.linspace(domain[2], domain[3], N + 1)
+    T, X = np.meshgrid(xspace, yspace)
+    Xgrid = np.vstack([T.flatten(), X.flatten()]).T
+
+    upred = solver.model(tf.cast(Xgrid, 'float32'))[:, 0]
+    
+    U = upred.numpy().reshape(N + 1, N + 1)
+
+    fig = plt.figure(figsize=(9, 6))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot_surface(T, X, U, cmap='jet')
+
+    ax.view_init(35, 35)
+    ax.set_xlabel('$%s$' % variables[0])
+    ax.set_ylabel('$%s$' % variables[1])
+    ax.set_zlabel('$u(%s, %s)$' % (variables[0], variables[1]))
+    ax.set_title('Solution of equation')
+    plt.show()
+
+    plt.imshow(U, cmap='jet')
+    plt.colorbar()
+    plt.show()
+
+    plt.plot(solver.loss_history)
+    plt.yscale('log')
+    plt.xlabel('Iteration')
+    plt.ylabel('Loss')
+    plt.show()

@@ -401,8 +401,7 @@ class AllenCahnEquation(BoundaryValueProblem):
         return [
             Condition("initial",
                       lambda Du: Du["u"] - Du["x"] ** 2 * tf.cos(np.pi * Du["x"]),
-                      (Cuboid([0, -1], [0, 1]), 100),
-                      weight=50),
+                      (Cuboid([0, -1], [0, 1]), 100)),
             Condition("boundary1",
                       lambda Du: Du["u"] + 1,
                       (Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1])), 200)),
@@ -411,8 +410,7 @@ class AllenCahnEquation(BoundaryValueProblem):
                       (Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1])), 200)),
             Condition("center",
                       lambda Du: Du["u"],
-                      (Cuboid([0, 0], [1, 0]), 100),
-                      weight=10),
+                      (Cuboid([0, 0], [1, 0]), 100)),
             Condition("inner",
                       lambda Du: Du["u_t"] - 0.0001 * Du["u_xx"] + 5 * (Du["u"] ** 3 - Du["u"]),
                       (Cuboid([0, -1], [1, 1]), 2500))
@@ -572,6 +570,9 @@ class Pendulum(BoundaryValueProblem):
     def conditions(cls):
         def initPos(t):
             return tf.concat([0 * t + 1, 0 * t], axis=1)
+        
+        def initVel(t):
+            return tf.concat([0 * t + 0, 0 * t + 0], axis=1)
 
         def ode(u, t, alpha):
             return -alpha * u - tf.concat([0 * t, 0 * t + 1.5], axis=1)
@@ -581,9 +582,9 @@ class Pendulum(BoundaryValueProblem):
                       lambda Du: Du["u"] - initPos(Du["t"]),
                       (Cuboid([0], [0]), 10)),
             Condition("initialVel",
-                      lambda Du: Du["u_t"],
+                      lambda Du: Du["u_t"] - initVel(Du["t"]),
                       (Cuboid([0], [0]), 10)),
-            Condition("ode",
+            Condition("inner",
                       lambda Du: Du["u_tt"] - ode(Du["u"], Du["t"], Du["alpha"]),
                       (Cuboid([0], [10]), 500)),
             Condition("constraint",

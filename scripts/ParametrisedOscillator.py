@@ -7,13 +7,16 @@ class Oscillator(BoundaryValueProblem):
         return [
             Condition("initial",
                       lambda Du: Du["u"] - 1,
-                      (Cuboid([1, 0], [2, 0]), 50)),
+                      (Cuboid([1, 0], [2, 0]), 50),
+                      Equidistant()),
             Condition("initial_x",
                       lambda Du: Du["u_x"],
-                      (Cuboid([1, 0], [2, 0]), 50)),
+                      (Cuboid([1, 0], [2, 0]), 50),
+                      Equidistant()),
             Condition("inner",
                       lambda Du: Du["u_xx"] + Du["t"]**2 * Du["u"],
-                      (Cuboid([1, 0], [2, 6.283]), 900))
+                      (Cuboid([1, 0], [2, 6.283]), 2500),
+                      Equidistant())
         ]
 
     @staticmethod
@@ -33,9 +36,9 @@ class Oscillator(BoundaryValueProblem):
 
 
 # Number of iterations
-N = 20000
+N = 10000
 lr_init = 0.01
-lr_end = 0.000001
+lr_end = 0.0001
 
 # Initialize solver, learning rate scheduler and choose optimizer
 solver = Solver(Oscillator, num_inputs=2, num_outputs=1, num_hidden_layers=4, num_neurons_per_layer=50)
@@ -43,7 +46,7 @@ lr = tf.keras.optimizers.schedules.ExponentialDecay(lr_init, decay_steps=N, deca
 optim = tf.keras.optimizers.Adam(learning_rate=lr)
 
 # Train model and plot results
-solver.train(optim, lr, N)
+solver.train(optim, lr, N, N // 5)
 
 
 N = 1000
@@ -59,7 +62,7 @@ U = upred.numpy().reshape(N + 1, N + 1)
 
 fig = plt.figure(figsize=(9, 6))
 ax = fig.add_subplot(111, projection='3d')
-ax.plot_surface(T, X, U, cmap='viridis')
+ax.plot_surface(T, X, U, cmap='jet')
 
 for t in np.linspace(1, 2, 10):
     x = np.linspace(0, 6.283, 500)
@@ -73,3 +76,5 @@ ax.set_ylabel('$x$')
 ax.set_zlabel('$u(t, x)$')
 ax.set_title('Solution of equation')
 plt.show()
+
+debug_plot_2D(solver, ('t', 'x'), (1, 2, 0, 6.283))
