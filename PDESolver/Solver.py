@@ -29,16 +29,6 @@ class Solver:
             Number of neurons in each hidden layer
         """
 
-        #model = tf.keras.Sequential()
-        #model.add(tf.keras.Input(num_inputs))
-
-        #for _ in range(num_hidden_layers):
-            #model.add(tf.keras.layers.Dense(num_neurons_per_layer,
-                                            #activation=tf.keras.activations.tanh,
-                                            #kernel_initializer='glorot_normal'))
-
-        #model.add(tf.keras.layers.Dense(num_outputs))
-
         self.model = init_model(num_inputs, num_outputs, num_hidden_layers, num_neurons_per_layer)
         self.bvp = bvp
         self.loss_history = []
@@ -62,40 +52,48 @@ class Solver:
         """
 
         def debug(gradients):
-            fig = plt.figure(figsize=(16, 8))
+            fig = plt.figure(layout='compressed', figsize=(16, 8))
             subfigs = fig.subfigures(2, 1, hspace=0)
             
-            self.model.summary()
-            print(' Layers: ', *[layer.name for layer in self.model.layers])
-            print('Gradients: ', *[gradient.shape for gradient in gradients[0]])
+            #self.model.summary()
+            #print(' Layers: ', *[layer.name for layer in self.model.layers])
+            #print('Gradients: ', *[gradient.shape for gradient in gradients[0]])
 
-            hidden_layers_indices = [1] + list(range(3, len(self.model.layers)))
-
-            axs = subfigs[0].subplots(1, len(hidden_layers_indices))
+            axs = subfigs[0].subplots(1, len(self.model.layers) - 3)
             subfigs[0].suptitle('Gradient Distributions')
-            for j in hidden_layers_indices:
-                xs = np.linspace(-1, 1, 1000)
-                density = lambda i, x: gaussian_kde(gradients[i][2*j].numpy().flatten())(x)
-                axs[j].plot(xs, density(0, xs), 'orange', lw=0.5, label='PDE')
-                axs[j].plot(xs, density(1, xs), 'b--', lw=0.5, label='Data')
+            for j in range(len(self.model.layers) - 1):
+                j_mod = j
+                if j in [1, 2]:
+                    continue
+                elif j > 2:
+                    j_mod -= 2  
 
-                axs[j].set_xlim(-1, 1)
-                axs[j].set_ylim(0, 100)
-                axs[j].set_yscale('symlog', linthresh=0.2)
-                axs[j].set_title('Layer {}'.format(self.model.layers[j].name))
-                axs[j].legend()
+                xs = np.linspace(-2.5, 2.5, 1000)
+                density = lambda i, x: gaussian_kde(gradients[i][2*j].numpy().flatten())(x)
+                axs[j_mod].plot(xs, density(0, xs), 'orange', lw=0.5, label='PDE')
+                axs[j_mod].plot(xs, density(1, xs), 'b--', lw=0.5, label='Data')
+
+                axs[j_mod].set_xlim(min(xs), max(xs))
+                axs[j_mod].set_ylim(0, 100)
+                axs[j_mod].set_xscale('symlog')
+                axs[j_mod].set_yscale('symlog')
+                axs[j_mod].set_title(self.model.layers[j+1].name)
+                axs[j_mod].legend()
 
             axs = subfigs[1].subplots(1, 2)
             axs[0].plot(self.loss_history, 'k', lw=0.5)
             axs[0].set_title('Loss History')
             axs[0].set_xlabel('Iteration')
             axs[0].set_ylabel('Loss')
+            axs[0].set_yscale('log')
 
             axs[1].plot(self.weight_history, 'k', lw=0.5)
             axs[1].set_title('Weight History')
             axs[1].set_xlabel('#Update')
             axs[1].set_ylabel('Weight')
 
+            figManager = plt.get_current_fig_manager()
+            figManager.window.state("zoomed")
             plt.show()
 
 
@@ -113,16 +111,16 @@ class Solver:
             return result
 
         def compute_losses():
-            criterion = tf.keras.losses.Huber()
+            criterion = tf.keras.losses.MeanSquaredError()
 
             pdeloss = 0
             dataloss = 0
             for i, cond in enumerate(self.bvp.conditions):
                 out = cond(self.model, self.bvp)
                 if cond.name == 'inner':
-                    pdeloss += self.weights[i] * criterion(out, 0)
+                    pdeloss += self.weights[i] * criterion(out, 0.0)
                 else:
-                    dataloss += self.weights[i] * criterion(out, 0)
+                    dataloss += self.weights[i] * criterion(out, 0.0)
 
             return pdeloss, dataloss
 
@@ -150,7 +148,7 @@ class Solver:
             
             loss, gradients = get_gradients()
             
-            if self.step % 10 == 0:
+            if self.step % 50 == 0:
                 new_weight = adjust_weights(gradients)
             else:
                 new_weight = -1.0
@@ -171,7 +169,7 @@ class Solver:
                 
             pbar.desc = 'loss = {:10.8e} lr = {:.5f}'.format(loss, lr_scheduler(i))
 
-            if i % debug_frequency == 0:
+            if i % debug_frequency == 0 or i == iterations - 1:
                 debug(gradients)
 
 
@@ -253,6 +251,16 @@ def init_model(num_inputs, num_outputs, num_hidden_layers, num_neurons_per_layer
 
     outputs = layers[-1](outputs)
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
+
+    #model = tf.keras.Sequential()
+    #model.add(tf.keras.Input(num_inputs))
+
+    #for _ in range(num_hidden_layers):
+        #model.add(tf.keras.layers.Dense(num_neurons_per_layer,
+                                        #activation=tf.keras.activations.tanh,
+                                        #kernel_initializer='glorot_normal'))
+
+    #model.add(tf.keras.layers.Dense(num_outputs))
 
     return model
 

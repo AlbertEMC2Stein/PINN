@@ -41,7 +41,7 @@ class HarmonicOscillator(BoundaryValueProblem):
 
 
 # Number of iterations
-N = 10000
+N = 2500
 
 # Initialize solver, learning rate scheduler and choose optimizer
 solver = Solver(
@@ -51,7 +51,7 @@ solver = Solver(
     num_hidden_layers=2,
     num_neurons_per_layer=25,
 )
-lr = tf.keras.optimizers.schedules.ExponentialDecay(0.01, N, 0.001)
+lr = tf.keras.optimizers.schedules.ExponentialDecay(0.01, N, 0.01)
 optim = tf.keras.optimizers.Adam(learning_rate=lr)
 
 # Train model and plot results

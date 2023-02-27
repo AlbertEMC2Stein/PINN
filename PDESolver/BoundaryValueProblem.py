@@ -1,6 +1,7 @@
 from PDESolver.Sampling import *
 import tensorflow as tf
 
+
 class classproperty(object):
     def __init__(self, fget):
         self.fget = fget

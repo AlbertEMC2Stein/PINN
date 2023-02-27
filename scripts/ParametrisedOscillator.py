@@ -7,15 +7,15 @@ class Oscillator(BoundaryValueProblem):
         return [
             Condition("initial",
                       lambda Du: Du["u"] - 1,
-                      (Cuboid([1, 0], [2, 0]), 50),
+                      (Cuboid([1, 0], [2, 0]), 100),
                       Equidistant()),
             Condition("initial_x",
                       lambda Du: Du["u_x"],
-                      (Cuboid([1, 0], [2, 0]), 50),
+                      (Cuboid([1, 0], [2, 0]), 100),
                       Equidistant()),
             Condition("inner",
                       lambda Du: Du["u_xx"] + Du["t"]**2 * Du["u"],
-                      (Cuboid([1, 0], [2, 6.283]), 2500),
+                      (Cuboid([1, 0], [2, 6.283]), 1600),
                       Equidistant())
         ]
 
@@ -38,7 +38,7 @@ class Oscillator(BoundaryValueProblem):
 # Number of iterations
 N = 10000
 lr_init = 0.01
-lr_end = 0.0001
+lr_end = 0.001
 
 # Initialize solver, learning rate scheduler and choose optimizer
 solver = Solver(Oscillator, num_inputs=2, num_outputs=1, num_hidden_layers=4, num_neurons_per_layer=50)
