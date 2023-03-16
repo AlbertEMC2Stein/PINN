@@ -1,13 +1,34 @@
 from PDESolver.Sampling import *
 import tensorflow as tf
 
+def _extract_variables(conditions):
+    variables = {}
+    while True:
+        variable_missing = False
+        for cond in conditions:
+            try:
+                cond.residue_fn(variables)
+            except KeyError as e:
+                variable = str(e).replace("'", "")
 
-class classproperty(object):
-    def __init__(self, fget):
-        self.fget = fget
+                variable_missing = True
+                variables[variable] = tf.constant(0, dtype=tf.float32)
 
-    def __get__(self, owner_self, owner_cls):
-        return self.fget(owner_cls)
+        if not variable_missing:
+            break
+
+    return variables
+
+def _compute_gradients(model, freeVariables, function_name, variable_names, needed_for_evaluation):
+    gradients = {}
+    with tf.GradientTape(persistent=True) as tape:
+        for i, variable_name in enumerate(variable_names):
+            gradients[variable_name] = freeVariables[:, i:i + 1]
+
+        del tape
+
+    return gradients
+
 
 
 class Condition:
@@ -88,8 +109,7 @@ class BoundaryValueProblem:
 
         return []
 
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
+    def calculate_differentials(self, model, freeVariables):
         """
         Calculates the differentials of the model at the given points.
 
@@ -104,6 +124,7 @@ class BoundaryValueProblem:
         -----------
         tensor: Tensor of differentials
         """
+    
         ...
 
     def get_debug_string(self):
@@ -286,8 +307,6 @@ class HeatEquation1D(BoundaryValueProblem):
         self.boundary = Union(Cuboid([0, 0], [1, 0]), Cuboid([0, 1], [1, 1]))
         self.inner = Cuboid([0, 0], [1, 1])
 
-
-    @classproperty
     def get_conditions(self):
         return [
             Condition("initial",
