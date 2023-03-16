@@ -3,6 +3,7 @@ import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
 def _outFolderExists():
@@ -13,12 +14,43 @@ def _outFolderExists():
 def _plot_loss(solver):
     fig = plt.figure(figsize=(9, 6))
     ax = fig.add_subplot(111)
-    ax.semilogy(range(len(solver.loss_history)), solver.loss_history, 'k-')
+    ax.semilogy(range(len(solver.loss_history)), solver.loss_history, 'k-', lw=0.5)
     ax.set_xlabel('$Iteration$')
     ax.set_ylabel('$Loss$')
     ax.set_xlim(0, len(solver.loss_history))
     plt.show()
 
+
+def _plot_3d(X, Y, Z, ax, variables, title, show=True):
+    ax.view_init(35, 135)
+    ax.invert_xaxis()
+    ax.invert_yaxis()
+    ax.set_xlabel('$%s$' % variables[0])
+    ax.set_ylabel('$%s$' % variables[1])
+    ax.set_zlabel('$u(%s, %s)$' % (variables[0], variables[1]))
+    ax.set_title(title)
+    
+    plot = ax.plot_surface(X, Y, Z, cmap='jet')
+    if show:
+        plt.show()
+
+    return plot
+
+
+def _plot_heatmap(X, Y, Z, ax, variables, title, show=True):
+    plot = ax.imshow(np.flip(Z, 0), cmap='jet', extent=[X.min(), X.max(), Y.min(), Y.max()])
+    ax.set_xlabel('$%s$' % variables[0])
+    ax.set_ylabel('$%s$' % variables[1])
+    ax.set_title(title)
+
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    plt.colorbar(plot, cax=cax)
+    if show:
+        plt.show()
+
+    return plot
+    
 
 def plot_1D(solver):
     """
@@ -33,7 +65,7 @@ def plot_1D(solver):
     def plot_sample_points():
         fig = plt.figure(figsize=(9, 6))
 
-        for cond in solver.bvp.conditions:
+        for cond in solver.bvp.get_conditions():
             t, x = cond.sample_points()[:, 0], cond.sample_points()[:, 1]
 
             if cond.name != 'inner':
@@ -50,13 +82,13 @@ def plot_1D(solver):
     def plot_u():
         # Set up meshgrid
         N = 1000
-        tspace = np.linspace(bounds[0][0], bounds[1][0], N + 1)
-        xspace = np.linspace(bounds[0][1], bounds[1][1], N + 1)
-        T, X = np.meshgrid(tspace, xspace)
-        Xgrid = np.vstack([T.flatten(), X.flatten()]).T
+        xspace = np.linspace(bounds[0][0], bounds[1][0], N + 1)
+        yspace = np.linspace(bounds[0][1], bounds[1][1], N + 1)
+        X, Y = np.meshgrid(xspace, yspace)
+        XYgrid = np.vstack([X.flatten(), Y.flatten()]).T
 
         # Determine predictions of u(t, x)
-        upred = solver.model(tf.cast(Xgrid, 'float32'))[:, 0]
+        upred = solver.model(tf.cast(XYgrid, 'float32'))[:, 0]
         minu, maxu = np.min(upred), np.max(upred)
 
         # Reshape upred
@@ -65,14 +97,9 @@ def plot_1D(solver):
         # Surface plot of solution u(t,x)
         fig = plt.figure(figsize=(9, 6))
         ax = fig.add_subplot(111, projection='3d')
-        ax.plot_surface(T, X, U, cmap='viridis')
-        ax.view_init(35, 35)
-        ax.set_xlabel('$t$')
-        ax.set_ylabel('$x$')
-        ax.set_zlabel('$u(t, x)$')
-        ax.set_title('Solution of equation')
-
+        _plot_3d(X, Y, U, ax, ['t', 'x'], 'Solution of equation', False)
         plt.savefig('../out/3D_%s_solution.pdf' % solver.bvp.__name__, bbox_inches='tight', dpi=300)
+        plt.show()
 
         fig = plt.figure(figsize=(9, 6))
         plt.imshow(U, cmap='viridis')
@@ -141,7 +168,7 @@ def plot_2D(solver):
         XYgrid = np.vstack([X.flatten(), Y.flatten()]).T
         XYgrid = tf.cast(XYgrid, 'float32')
 
-        plot = ax.plot_surface(X, Y, 0 * X, cmap='viridis')
+        plot = _plot_3d(X, Y, np.zeros_like(X), ax, ['$t$', '$x$'], '', False)
 
         def data_gen(frame):
             x, y = XYgrid[:, 0], XYgrid[:, 1]
@@ -270,30 +297,47 @@ def debug_plot_2D(solver, variables, domain):
     N = 1000
     xspace = np.linspace(domain[0], domain[1], N + 1)
     yspace = np.linspace(domain[2], domain[3], N + 1)
-    T, X = np.meshgrid(xspace, yspace)
-    Xgrid = np.vstack([T.flatten(), X.flatten()]).T
+    X, Y = np.meshgrid(xspace, yspace)
+    XYgrid = np.vstack([X.flatten(), Y.flatten()]).T
 
-    upred = solver.model(tf.cast(Xgrid, 'float32'))[:, 0]
+    upred = solver.model(tf.cast(XYgrid, 'float32'))[:, 0]
     
     U = upred.numpy().reshape(N + 1, N + 1)
 
     fig = plt.figure(figsize=(9, 6))
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(T, X, U, cmap='jet')
+    _plot_3d(X, Y, U, ax, variables, 'Solution of equation')
 
-    ax.view_init(35, 35)
-    ax.set_xlabel('$%s$' % variables[0])
-    ax.set_ylabel('$%s$' % variables[1])
-    ax.set_zlabel('$u(%s, %s)$' % (variables[0], variables[1]))
-    ax.set_title('Solution of equation')
-    plt.show()
-
-    plt.imshow(U, cmap='jet')
+    plt.imshow(np.flip(U, 0), cmap='jet', extent=domain)
     plt.colorbar()
     plt.show()
 
-    plt.plot(solver.loss_history)
-    plt.yscale('log')
-    plt.xlabel('Iteration')
-    plt.ylabel('Loss')
-    plt.show()
+    _plot_loss(solver)
+
+
+def error_plot_2D(solver, exact_solution, variables, domain, heatmap=True):
+    N = 1000
+    xspace = np.linspace(domain[0], domain[1], N + 1)
+    yspace = np.linspace(domain[2], domain[3], N + 1)
+    X, Y = np.meshgrid(xspace, yspace)
+    XYgrid = np.vstack([X.flatten(), Y.flatten()]).T
+
+    upred = solver.model(tf.cast(XYgrid, 'float32'))[:, 0]
+    U = upred.numpy().reshape(N + 1, N + 1)
+
+    fig = plt.figure(figsize=(18, 5))
+    plt.subplots_adjust(left=0.01, right=0.97)
+
+    options, plot_fun = ({'projection': '3d'}, _plot_3d) if not heatmap else ({}, _plot_heatmap)
+
+    ax = fig.add_subplot(131, **options)
+    plot_fun(X, Y, exact_solution(X, Y), ax, variables, 'Exact solution', False)
+
+    ax = fig.add_subplot(132, **options)
+    plot_fun(X, Y, U, ax, variables, 'Predicted solution', False)
+
+    ax = fig.add_subplot(133)
+    _plot_heatmap(X, Y, np.abs(U - exact_solution(X, Y)), 
+                  ax, variables, 'Absolute Error', True)
+
+    _plot_loss(solver)

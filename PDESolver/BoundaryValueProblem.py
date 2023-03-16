@@ -33,10 +33,15 @@ class Condition:
         self.residue_fn = residue_fn
         self.sample_points = lambda: region_samples_pair[0].pick(region_samples_pair[1], sampler)
         self._region = region_samples_pair[0]
+
+        big_sample = region_samples_pair[0].pick(1e5, sampler, ignore_samples=True)
+        self._mean = tf.math.reduce_mean(big_sample, 0)
+        self._variance = tf.math.reduce_variance(big_sample, 0)
         
     def __call__(self, model, bvp):
-        Du = bvp.calculate_differentials(model, self.sample_points())
-        return self.residue_fn(Du)
+        samples = self.sample_points()
+        Du = bvp.calculate_differentials(model, samples)
+        return self.residue_fn(Du), samples
 
     def get_region_bounds(self):
         """
@@ -48,6 +53,16 @@ class Condition:
         """
 
         return self._region.get_bounds()
+    
+    def get_normalization_constants(self):
+        """
+        Returns the normalization constants of the region.
+
+        Returns
+        -----------
+        tuple: Tuple of (mean, variance)
+        """
+        return self._mean, self._variance
 
 
 class BoundaryValueProblem:
@@ -55,8 +70,14 @@ class BoundaryValueProblem:
     Class for defining boundary value problems.
     """
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        """
+        Constructor for a BoundaryValueProblem.
+        """
+
+        ...
+
+    def get_conditions(self):
         """
         Returns the conditions of the boundary value problem.
 
@@ -85,10 +106,9 @@ class BoundaryValueProblem:
         """
         ...
 
-    @classmethod
-    def get_debug_string(cls):
+    def get_debug_string(self):
         debug = ""
-        for cond in cls.conditions:
+        for cond in self.get_conditions():
             samples = len(cond.sample_points())
             debug += "%s: %d\t" % (cond.name, samples)
 
@@ -102,18 +122,27 @@ class Laplace(BoundaryValueProblem):
     (x, y) ⟼ z
     """
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        """
+        Constructor for a Laplace equation.
+        """
+
+        super().__init__()
+        self.zero_boundary = Union(Cuboid([0, 0], [0, 1]), Cuboid([0, 0], [1, 0]), Cuboid([1, 0], [1, 1]))
+        self.f_boundary = Cuboid([0, 1], [1, 1])
+        self.inner = Cuboid([0, 0], [1, 1])
+
+    def get_conditions(self):
         return [
             Condition("zero_boundary",
                       lambda Du: Du["u"],
-                      (Union(Cuboid([0, 0], [0, 1]), Cuboid([0, 0], [1, 0]), Cuboid([1, 0], [1, 1])), 180)),
+                      (self.zero_boundary, 180)),
             Condition("f_boundary",
                       lambda Du: Du["u"] - tf.where(tf.abs(Du["x"] - 0.5) < 0.25, 1., 0.), #2 * Du["x"] * (1 - Du["x"]),
-                      (Cuboid([0, 1], [1, 1]), 400)),
+                      (self.f_boundary, 400)),
             Condition("inner",
                       lambda Du: Du["u_xx"] + Du["u_yy"],
-                      (Cuboid([0, 0], [1, 1]), 1600))
+                      (self.inner, 1600))
         ]
 
     @staticmethod
@@ -144,18 +173,28 @@ class WaveEquation1D(BoundaryValueProblem):
     (t, x) ⟼ y
     """
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        """
+        Constructor for a 1D wave equation.
+        """
+
+        super().__init__()
+        self.initial = Cuboid([0, -1], [0, 1])
+        self.boundary1 = Cuboid([0, -1], [0, 1])
+        self.inner = Cuboid([0, -1], [1, 1])
+
+    
+    def get_conditions(self):
         return [
             Condition("initial",
                       lambda Du: Du["u"] - 1 / (200*(Du["x"] + 0.5)**2 + 1) - 1 / (200*(Du["x"] - 0.5)**2 + 2),
-                      (Cuboid([0, -1], [0, 1]), 100)),
+                      (self.initial, 128)),
             Condition("boundary1",
                       lambda Du: Du["u_t"],
-                      (Cuboid([0, -1], [0, 1]), 100)),
+                      (self.boundary1, 128)),
             Condition("inner",
                       lambda Du: Du["u_tt"] - Du["u_xx"],
-                      (Cuboid([0, -1], [1, 1]), 900))
+                      (self.inner, 128))
         ]
 
     @staticmethod
@@ -186,15 +225,23 @@ class WaveEquation2D(BoundaryValueProblem):
     (t, x, y) ⟼ z
     """
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        """
+        Constructor for a 2D wave equation.
+        """
+
+        super().__init__()
+        self.initial_u = Cuboid([0, -2, -2], [0, 2, 2])
+        self.inner = Cuboid([0, -2, -2], [2, 2, 2])
+
+    def get_conditions(self):
         return [
             Condition("initial_u",
                       lambda Du: Du["u"] - tf.exp(-Du["x"] ** 2 - Du["y"] ** 2) ** 4,
-                      (Cuboid([0, -2, -2], [0, 2, 2]), 400)),
+                      (self.initial_u, 400)),
             Condition("inner",
                       lambda Du: Du["u_tt"] - Du["u_xx"] - Du["u_yy"],
-                      (Cuboid([0, -2, -2], [2, 2, 2]), 4900))
+                      (self.inner, 4900))
         ]
 
     @staticmethod
@@ -226,21 +273,32 @@ class HeatEquation1D(BoundaryValueProblem):
     """
     Class defining the 1D heat equation as a boundary value problem.
 
-    (t, x) ⟼ (y, control)
+    (t, x) ⟼ y
     """
 
+    def __init__(self):
+        """
+        Constructor for a 1D heat equation.
+        """
+
+        super().__init__()
+        self.initial = Cuboid([0, 0], [0, 1])
+        self.boundary = Union(Cuboid([0, 0], [1, 0]), Cuboid([0, 1], [1, 1]))
+        self.inner = Cuboid([0, 0], [1, 1])
+
+
     @classproperty
-    def conditions(cls):
+    def get_conditions(self):
         return [
             Condition("initial",
                       lambda Du: Du["u"] - 8*Du["x"]**2 * (1 - Du["x"])**2,
-                      (Cuboid([0, 0], [0, 1]), 100)),
+                      (self.initial, 100)),
             Condition("boundary",
                       lambda Du: Du["u_x"],
-                      (Union(Cuboid([0, 0], [1, 0]), Cuboid([0, 1], [1, 1])), 100)),
+                      (self.boundary, 100)),
             Condition("inner",
                       lambda Du: Du["u_t"] - 0.125 * Du["u_xx"],
-                      (Cuboid([0, 0], [1, 1]), 1600),
+                      (self.inner, 1600),
                       Equidistant())
         ]
 
@@ -272,15 +330,23 @@ class HeatEquation2D(BoundaryValueProblem):
     (t, x, y) ⟼ z
     """
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        """
+        Constructor for a 2D heat equation.
+        """
+
+        super().__init__()
+        self.initial = Cuboid([0, -2, -2], [0, 2, 2])
+        self.inner = Cuboid([0, -2, -2], [2, 2, 2])
+
+    def get_conditions(self):
         return [
             Condition("initial",
                       lambda Du: Du["u"] - tf.exp(-Du["x"] ** 2 - Du["y"] ** 2) ** 2,
-                      (Cuboid([0, -2, -2], [0, 2, 2]), 400)),
+                      (self.initial, 400)),
             Condition("inner",
                       lambda Du: Du["u_t"] - Du["u_xx"] - Du["u_yy"],
-                      (Cuboid([0, -2, -2], [2, 2, 2]), 3600))
+                      (self.inner, 3600))
         ]
 
     @staticmethod
@@ -313,18 +379,27 @@ class BurgersEquation(BoundaryValueProblem):
     (t, x) ⟼ y
     """
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        """
+        Constructor for a Burgers equation.
+        """
+
+        super().__init__()
+        self.initial = Cuboid([0, -1], [0, 1])
+        self.boundary = Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1]))
+        self.inner = Cuboid([0, -1], [1, 1])
+
+    def get_conditions(self):
         return [
             Condition("initial",
                       lambda Du: Du["u"] + tf.sin(np.pi * Du["x"]),
-                      (Cuboid([0, -1], [0, 1]), 200)),
+                      (self.initial, 200)),
             Condition("boundary",
                       lambda Du: Du["u"],
-                      (Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1])), 200)),
+                      (self.boundary, 200)),
             Condition("inner",
                       lambda Du: Du["u_t"] + Du["u"] * Du["u_x"] - 0.01 / np.pi * Du["u_xx"],
-                      (Cuboid([0, -1], [1, 1]), 1600))
+                      (self.inner, 1600))
         ]
 
     @staticmethod
@@ -354,21 +429,31 @@ class VanDerPolEquation(BoundaryValueProblem):
     (t, x) ⟼ y
     """
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        """
+        Constructor for a Van-der-Pol equation.
+        """
+
+        super().__init__()
+        self.initial = Cuboid([0, 0], [4, 0])
+        self.boundary = Cuboid([0, 0], [4, 0])
+        self.helper = Cuboid([0, 0], [0, 10])
+        self.inner = Cuboid([0, 0], [4, 10])
+
+    def conditions(self):
         return [
             Condition("initial",
                       lambda Du: Du["u"] - 1,
-                      (Cuboid([0, 0], [4, 0]), 200)),
+                      (self.initial, 200)),
             Condition("boundary",
                       lambda Du: Du["u_x"],
-                      (Cuboid([0, 0], [4, 0]), 200)),
+                      (self.boundary, 200)),
             Condition("helper",
                       lambda Du: Du["u"] - tf.cos(Du["x"]),
-                      (Cuboid([0, 0], [0, 10]), 200)),
+                      (self.helper, 200)),
             Condition("inner",
                       lambda Du: Du["u_xx"] - Du["t"] * (1 - Du["u"] ** 2) * Du["u_x"] + Du["u"],
-                      (Cuboid([0, 0], [4, 10]), 3000))
+                      (self.inner, 3000))
         ]
 
     @staticmethod
@@ -397,24 +482,34 @@ class AllenCahnEquation(BoundaryValueProblem):
     (t, x) ⟼ y
     """
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        """
+        Constructor for a Allen-Cahn equation.
+        """
+
+        super().__init__()
+        self.initial = Cuboid([0, -1], [0, 1])
+        self.boundary = Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1]))
+        self.center = Cuboid([0, 0], [1, 0])
+        self.inner = Cuboid([0, -1], [1, 1])
+
+    def get_conditions(self):
         return [
             Condition("initial",
                       lambda Du: Du["u"] - Du["x"] ** 2 * tf.cos(np.pi * Du["x"]),
-                      (Cuboid([0, -1], [0, 1]), 100)),
+                      (self.initial, 100)),
             Condition("boundary1",
                       lambda Du: Du["u"] + 1,
-                      (Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1])), 200)),
+                      (self.boundary, 200)),
             Condition("boundary2",
                       lambda Du: Du["u_x"],
-                      (Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1])), 200)),
+                      (self.boundary, 200)),
             Condition("center",
                       lambda Du: Du["u"],
-                      (Cuboid([0, 0], [1, 0]), 100)),
+                      (self.center, 100)),
             Condition("inner",
                       lambda Du: Du["u_t"] - 0.0001 * Du["u_xx"] + 5 * (Du["u"] ** 3 - Du["u"]),
-                      (Cuboid([0, -1], [1, 1]), 2500))
+                      (self.inner, 2500))
         ]
 
     @staticmethod
@@ -442,17 +537,25 @@ class KortewegDeVriesEquation(BoundaryValueProblem):
         Class defining the KortewegDeVriesEquation equation.
 
         (t, x) ⟼ y
+    """
+
+    def __init__(self):
+        """
+        Constructor for a KortewegDeVriesEquation equation.
         """
 
-    @classproperty
-    def conditions(cls):
+        super().__init__()
+        self.initial = Cuboid([0, -1], [0, 1])
+        self.inner = Cuboid([0, -1], [1, 1])
+
+    def get_conditions(self):
         return [
             Condition("initial",
                       lambda Du: Du["u"] - tf.cos(np.pi * Du["x"]),
-                      (Cuboid([0, -1], [0, 1]), 500)),
+                      (self.initial, 500)),
             Condition("inner",
                       lambda Du: Du["u_t"] + 6 * Du["u"] * Du["u_x"] + Du["u_xxx"],
-                      (Cuboid([0, -1], [1, 1]), 2000))
+                      (self.inner, 2000))
         ]
 
     @staticmethod
@@ -484,15 +587,23 @@ class ConvectionDiffusionEquation(BoundaryValueProblem):
     (t, x) ⟼ y
     """
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        """
+        Constructor for a Convection-Diffusion equation.
+        """
+
+        super().__init__()
+        self.initital = Cuboid([0, -0.5], [0, 1])
+        self.inner = Cuboid([0, -0.5], [1, 1])
+
+    def get_conditions(self):
         return [
             Condition("initial",
                       lambda Du: Du["u"] - tf.exp(-25 * Du["x"]**2),
-                      (Cuboid([0, -0.5], [0, 1]), 100)),
+                      (self.initital, 100)),
             Condition("inner",
                       lambda Du: Du["u_t"] + Du["u_x"] - 0.1 * Du["u_xx"],
-                      (Cuboid([0, -0.5], [1, 1]), 1000))
+                      (self.inner, 1000))
         ]
 
     @staticmethod
@@ -522,19 +633,28 @@ class MinimalSurfaceEquation(BoundaryValueProblem):
     (x, y) ⟼ z
     """
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        """
+        Constructor for a minimal surface equation.
+        """
+
+        super().__init__()
+        self.boundary1 = Cuboid([0, -1], [0, 1])
+        self.boundary2 = Cuboid([1, -1], [1, 1])
+        self.inner = Cuboid([0, -1], [1, 1])
+
+    def get_conditions(self):
         return [
             Condition("boundary1",
                       lambda Du: Du["u"] - Du["x"],
-                      (Cuboid([0, -1], [0, 1]), 50)),
+                      (self.boundary1, 50)),
             Condition("boundary2",
                       lambda Du: Du["u"] + Du["x"],
-                      (Cuboid([1, -1], [1, 1]), 50)),
+                      (self.boundary2, 50)),
             Condition("inner",
                       lambda Du: (1 + Du["u_x"] ** 2) * Du["u_yy"] - 2 * Du["u_y"] * Du["u_x"] * Du["u_xy"] + (
                               1 + Du["u_y"] ** 2) * Du["u_xx"],
-                      (Cuboid([0, -1], [1, 1]), 500))
+                      (self.inner, 500))
         ]
 
     @staticmethod
@@ -567,8 +687,17 @@ class Pendulum(BoundaryValueProblem):
     t ⟼ (x_1, x_2, lambda)
     """
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        """
+        Constructor for a pendulum.
+        """
+
+        super().__init__()
+        self.initialPos = Cuboid([0], [0])
+        self.initialVel = Cuboid([0], [0])
+        self.inner = Cuboid([0], [10])
+
+    def get_conditions(self):
         def initPos(t):
             return tf.concat([0 * t + 1, 0 * t], axis=1)
         
@@ -581,16 +710,16 @@ class Pendulum(BoundaryValueProblem):
         return [
             Condition("initialPos",
                       lambda Du: Du["u"] - initPos(Du["t"]),
-                      (Cuboid([0], [0]), 10)),
+                      (self.initialPos, 10)),
             Condition("initialVel",
                       lambda Du: Du["u_t"] - initVel(Du["t"]),
-                      (Cuboid([0], [0]), 10)),
+                      (self.initialVel, 10)),
             Condition("inner",
                       lambda Du: Du["u_tt"] - ode(Du["u"], Du["t"], Du["alpha"]),
-                      (Cuboid([0], [10]), 500)),
+                      (self.inner, 500)),
             Condition("constraint",
                       lambda Du: tf.norm(Du["u"], axis=1)**2 - 1.,
-                      (Cuboid([0], [10]), 500))
+                      (self.constraint, 500))
         ]
 
     @staticmethod
