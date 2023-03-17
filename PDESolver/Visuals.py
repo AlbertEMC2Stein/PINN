@@ -14,10 +14,16 @@ def _outFolderExists():
 def _plot_loss(solver):
     fig = plt.figure(figsize=(9, 6))
     ax = fig.add_subplot(111)
-    ax.semilogy(range(len(solver.loss_history)), solver.loss_history, 'k-', lw=0.5)
+
+    n = len(solver.loss_history)
+    k = min(100, n)
+    averaged_loss = np.convolve(solver.loss_history, np.ones(k) / k, mode='same')
+
+    ax.semilogy(range(n), solver.loss_history, 'k-', lw=0.5)
+    ax.semilogy(range(n), averaged_loss, 'r--', lw=1)
     ax.set_xlabel('$Iteration$')
     ax.set_ylabel('$Loss$')
-    ax.set_xlim(0, len(solver.loss_history))
+    ax.set_xlim(0, n - (1 if n > 1 else 0))
     plt.show()
 
 
@@ -38,7 +44,7 @@ def _plot_3d(X, Y, Z, ax, variables, title, show=True):
 
 
 def _plot_heatmap(X, Y, Z, ax, variables, title, show=True):
-    plot = ax.imshow(np.flip(Z, 0), cmap='jet', extent=[X.min(), X.max(), Y.min(), Y.max()])
+    plot = ax.imshow(np.flip(Z, 0), cmap='jet', extent=[X.min(), X.max(), Y.min(), Y.max()], aspect='auto')
     ax.set_xlabel('$%s$' % variables[0])
     ax.set_ylabel('$%s$' % variables[1])
     ax.set_title(title)
@@ -98,7 +104,7 @@ def plot_1D(solver):
         fig = plt.figure(figsize=(9, 6))
         ax = fig.add_subplot(111, projection='3d')
         _plot_3d(X, Y, U, ax, ['t', 'x'], 'Solution of equation', False)
-        plt.savefig('../out/3D_%s_solution.pdf' % solver.bvp.__name__, bbox_inches='tight', dpi=300)
+        plt.savefig('../out/3D_%s_solution.pdf' % solver.bvp.__class__.__name__, bbox_inches='tight', dpi=300)
         plt.show()
 
         fig = plt.figure(figsize=(9, 6))
@@ -107,7 +113,7 @@ def plot_1D(solver):
         ax.set_ylabel('$x$')
         ax.set_title('Solution of equation')
 
-        plt.savefig('../out/2D_%s_solution.pdf' % solver.bvp.__name__, bbox_inches='tight', dpi=300)
+        plt.savefig('../out/2D_%s_solution.pdf' % solver.bvp.__class__.__name__, bbox_inches='tight', dpi=300)
         plt.show()
 
         return minu, maxu
@@ -134,7 +140,7 @@ def plot_1D(solver):
         anim = FuncAnimation(fig, update, frames=np.linspace(bounds[0][0], bounds[1][0], 300),
                             interval=16, init_func=init, blit=True)
 
-        anim.save("../out/2D_%s_solution.gif" % solver.bvp.__name__, fps=30)
+        anim.save("../out/2D_%s_solution.gif" % solver.bvp.__class__.__name__, fps=30)
         plt.show()
 
     inner = [cond for cond in solver.bvp.conditions if cond.name == "inner"][0]
@@ -187,7 +193,7 @@ def plot_2D(solver):
         anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 120),
                              interval=16, blit=False)
 
-        anim.save("../out/%s_solution.gif" % solver.bvp.__name__, fps=30)
+        anim.save("../out/%s_solution.gif" % solver.bvp.__class__.__name__, fps=30)
         plt.show()
 
     _plot_loss(solver)
@@ -238,7 +244,7 @@ def plot_2Dvectorfield(solver):
         anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 240),
                              interval=16, blit=False)
 
-        anim.save("../out/%s_solution.gif" % solver.bvp.__name__, fps=30)
+        anim.save("../out/%s_solution.gif" % solver.bvp.__class__.__name__, fps=30)
         plt.show()
 
     _outFolderExists()
@@ -285,7 +291,7 @@ def plot_phaseplot(solver):
         anim = FuncAnimation(fig, update, frames=np.arange(len(tspace)),
                             init_func=init, blit=True, interval=16)
 
-        anim.save("../out/%s_solution.gif" % solver.bvp.__name__, fps=60)
+        anim.save("../out/%s_solution.gif" % solver.bvp.__class__.__name__, fps=60)
         plt.show()
 
     _outFolderExists()

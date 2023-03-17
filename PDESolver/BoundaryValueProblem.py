@@ -54,8 +54,9 @@ class Condition:
         self.residue_fn = residue_fn
         self.sample_points = lambda: region_samples_pair[0].pick(region_samples_pair[1], sampler)
         self._region = region_samples_pair[0]
+        self.sampler = sampler
 
-        big_sample = region_samples_pair[0].pick(1e5, sampler, ignore_samples=True)
+        big_sample = region_samples_pair[0].pick(int(1e5), sampler, ignore_samples=True)
         self._mean = tf.math.reduce_mean(big_sample, 0)
         self._variance = tf.math.reduce_variance(big_sample, 0)
         
@@ -715,6 +716,7 @@ class Pendulum(BoundaryValueProblem):
         self.initialPos = Cuboid([0], [0])
         self.initialVel = Cuboid([0], [0])
         self.inner = Cuboid([0], [10])
+        self.constraint = Cuboid([0], [10])
 
     def get_conditions(self):
         def initPos(t):
@@ -729,16 +731,16 @@ class Pendulum(BoundaryValueProblem):
         return [
             Condition("initialPos",
                       lambda Du: Du["u"] - initPos(Du["t"]),
-                      (self.initialPos, 10)),
+                      (self.initialPos, 128)),
             Condition("initialVel",
                       lambda Du: Du["u_t"] - initVel(Du["t"]),
-                      (self.initialVel, 10)),
+                      (self.initialVel, 128)),
             Condition("inner",
                       lambda Du: Du["u_tt"] - ode(Du["u"], Du["t"], Du["alpha"]),
-                      (self.inner, 500)),
+                      (self.inner, 128)),
             Condition("constraint",
                       lambda Du: tf.norm(Du["u"], axis=1)**2 - 1.,
-                      (self.constraint, 500))
+                      (self.constraint, 128))
         ]
 
     @staticmethod

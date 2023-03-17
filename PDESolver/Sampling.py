@@ -184,7 +184,7 @@ class Random(Sampler):
         array: Array of shape (n,)
         """
 
-        return tf.random.uniform(shape=(1,n))
+        return tf.random.uniform(shape=(1, n))
 
 
 class FirstRandom(Sampler):
@@ -215,7 +215,7 @@ class FirstRandom(Sampler):
         -----------
         array: Array of shape (n,)
         """
-        return tf.random.uniform(shape=(1,n))
+        return tf.random.uniform(shape=(1, n))
 
 
 class Equidistant(Sampler):
@@ -262,7 +262,7 @@ class EquidistantRandom(Sampler):
         super().__init__()
         self.isPersistent = False
         self.n = n
-        self.original = tf.linspace(0, 1, int(n))
+        self.original = tf.linspace(0., 1., n)
 
     def pick(self, n):
         """
@@ -278,5 +278,5 @@ class EquidistantRandom(Sampler):
         array: Array of shape (n,)
         """
 
-        idx = tf.random.uniform(shape=(n,), minval=0, maxval=self.n - 1, dtype=tf.int64)
-        return tf.gather(self.original, idx)
+        idx = tf.random.uniform(shape=(int(n),), minval=0, maxval=self.n - 1, dtype=tf.int64)
+        return tf.gather(self.original, idx)[tf.newaxis, :]

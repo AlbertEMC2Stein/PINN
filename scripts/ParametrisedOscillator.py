@@ -2,21 +2,23 @@ from PDESolver import *
 
 
 class Oscillator(BoundaryValueProblem):
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        super().__init__()
+        self.initial = Cuboid([1, 0], [2, 0])
+        self.initial_x = Cuboid([1, 0], [2, 0])
+        self.inner = Cuboid([1, 0], [2, 6.283])
+
+    def get_conditions(self):
         return [
             Condition("initial",
                       lambda Du: Du["u"] - 1,
-                      (Cuboid([1, 0], [2, 0]), 100),
-                      Equidistant()),
+                      (self.initial, 128)),
             Condition("initial_x",
                       lambda Du: Du["u_x"],
-                      (Cuboid([1, 0], [2, 0]), 100),
-                      Equidistant()),
+                      (self.initial_x, 128)),
             Condition("inner",
                       lambda Du: Du["u_xx"] + Du["t"]**2 * Du["u"],
-                      (Cuboid([1, 0], [2, 6.283]), 1600),
-                      Equidistant())
+                      (self.inner, 128))
         ]
 
     @staticmethod
@@ -37,16 +39,14 @@ class Oscillator(BoundaryValueProblem):
 
 # Number of iterations
 N = 10000
-lr_init = 0.01
-lr_end = 0.001
 
 # Initialize solver, learning rate scheduler and choose optimizer
-solver = Solver(Oscillator, num_inputs=2, num_outputs=1, num_hidden_layers=4, num_neurons_per_layer=50)
-lr = tf.keras.optimizers.schedules.ExponentialDecay(lr_init, decay_steps=N, decay_rate=lr_end / lr_init)
+solver = Solver(Oscillator(), num_inputs=2, num_outputs=1, num_hidden_layers=4, num_neurons_per_layer=50)
+lr = tf.keras.optimizers.schedules.ExponentialDecay(0.001, decay_steps=1000, decay_rate=0.9)
 optim = tf.keras.optimizers.Adam(learning_rate=lr)
 
 # Train model and plot results
-solver.train(optim, lr, N, N // 5)
+solver.train(optim, lr, N, N)
 
 
 N = 1000
@@ -77,4 +77,4 @@ ax.set_zlabel('$u(t, x)$')
 ax.set_title('Solution of equation')
 plt.show()
 
-debug_plot_2D(solver, ('t', 'x'), (1, 2, 0, 6.283))
+error_plot_2D(solver, lambda t, x: np.cos(t * x), ('t', 'x'), (1, 2, 0, 6.283))

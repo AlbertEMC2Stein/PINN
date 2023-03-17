@@ -16,7 +16,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
 class Solver:
-    def __init__(self, bvp, num_inputs=2, num_outputs=1, num_hidden_layers=6, num_neurons_per_layer=16):
+    def __init__(self, bvp, num_inputs=2, num_outputs=1, num_hidden_layers=4, num_neurons_per_layer=50):
         """
         Constructor for the Solver class.
 
@@ -26,12 +26,16 @@ class Solver:
             Boundary value problem to be solved
         num_inputs: int
             Number of inputs to the neural network
+            Defaults to 2
         num_outputs: int
             Number of outputs from the neural network
+            Defaults to 1
         num_hidden_layers: int
             Number of hidden layers in the neural network
+            Defaults to 4
         num_neurons_per_layer:  int
             Number of neurons in each hidden layer
+            Defaults to 50
         """
 
         inner_constraint = [condition for condition in bvp.get_conditions() if condition.name == 'inner'][0]
@@ -86,20 +90,27 @@ class Solver:
                 axs[ax_count].set_title(self.model.layers[j].name)
                 axs[ax_count].legend()
 
+            n = len(self.loss_history)
+            k = min(100, n)
+            averaged_loss = np.convolve(self.loss_history, np.ones(k) / k, mode='same')
+
             axs = subfigs[1].subplots(1, 2)
-            axs[0].plot(self.loss_history, 'k', lw=0.5)
+            axs[0].semilogy(range(n), self.loss_history, 'k-', lw=0.5)
+            axs[0].semilogy(range(n), averaged_loss, 'r--', lw=1)
             axs[0].set_title('Loss History')
             axs[0].set_xlabel('Iteration')
             axs[0].set_ylabel('Loss')
-            axs[0].set_yscale('log')
+            axs[0].set_xlim(0, n - (1 if n > 1 else 0))
 
             axs[1].plot(self.weight_history, 'k', lw=0.5)
             axs[1].set_title('Weight History')
             axs[1].set_xlabel('#Update')
             axs[1].set_ylabel('Weight')
+            axs[1].set_xlim(0, len(self.weight_history) - 1)
 
             figManager = plt.get_current_fig_manager()
             figManager.window.state("zoomed")
+            
             plt.show()
 
         def adjust_weights(gradients):
@@ -116,7 +127,7 @@ class Solver:
             return result
 
         def compute_losses():
-            criterion = tf.keras.losses.Huber()
+            criterion = tf.keras.losses.MeanSquaredError()
 
             pdeloss = 0
             dataloss = 0
@@ -149,7 +160,7 @@ class Solver:
                 self.weights = tf.Variable(np.ones(len(self.bvp.get_conditions())), dtype=tf.float32)
                 
             if self.step is None:
-                self.step = tf.Variable(1)
+                self.step = tf.Variable(0)
             
             loss, gradients, samples = get_gradients()
             
@@ -172,19 +183,20 @@ class Solver:
             
             if new_weight != -1:
                 self.weight_history += [new_weight.numpy()]
-                
-            pbar.desc = 'loss = {:10.8e} lr = {:.5f}'.format(loss, lr_scheduler(i))
+            
+            avgloss = np.mean(self.loss_history[-100:])
+            pbar.desc = 'øloss = {:10.8e} lr = {:.5f}'.format(avgloss, lr_scheduler(i))
 
             if i % debug_frequency == 0 or i == iterations - 1:
                 debug(gradients)
                 
                 n = min(i, 100)
                 color = plt.cm.rainbow(np.linspace(0, 1, n))
-                for j in range(n):
-                    plt.scatter(*self.sample_history[j].numpy().T, s=0.5, c=[color[j]] * len(self.sample_history[j]), cmap='viridis')
+                #for j in range(n):
+                #    plt.scatter(*self.sample_history[j].numpy().T, s=0.5, c=[color[j]] * len(self.sample_history[j]), cmap='viridis')
                 
-                plt.title("Samples generated in the last 100 iterations")
-                plt.show()
+                #plt.title("Samples generated in the last 100 iterations")
+                #plt.show()
 
 
 ###################################################################################
