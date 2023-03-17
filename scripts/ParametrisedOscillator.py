@@ -48,33 +48,4 @@ optim = tf.keras.optimizers.Adam(learning_rate=lr)
 # Train model and plot results
 solver.train(optim, lr, N, N)
 
-
-N = 1000
-tspace = np.linspace(1, 2, N + 1)
-xspace = np.linspace(0, 6.283, N + 1)
-T, X = np.meshgrid(tspace, xspace)
-Xgrid = np.vstack([T.flatten(), X.flatten()]).T
-
-upred = solver.model(tf.cast(Xgrid, 'float32'))[:, 0]
-minu, maxu = np.min(upred), np.max(upred)
-
-U = upred.numpy().reshape(N + 1, N + 1)
-
-fig = plt.figure(figsize=(9, 6))
-ax = fig.add_subplot(111, projection='3d')
-ax.plot_surface(T, X, U, cmap='jet')
-
-for t in np.linspace(1, 2, 10):
-    x = np.linspace(0, 6.283, 500)
-    y = [t] * 500
-    z = np.cos(t * x)
-    ax.plot(y, x, z, c='r')
-
-ax.view_init(35, 35)
-ax.set_xlabel('$t$')
-ax.set_ylabel('$x$')
-ax.set_zlabel('$u(t, x)$')
-ax.set_title('Solution of equation')
-plt.show()
-
 error_plot_2D(solver, lambda t, x: np.cos(t * x), ('t', 'x'), (1, 2, 0, 6.283))
