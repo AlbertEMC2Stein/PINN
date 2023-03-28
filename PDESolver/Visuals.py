@@ -174,28 +174,49 @@ def plot_2D(solver):
         XYgrid = np.vstack([X.flatten(), Y.flatten()]).T
         XYgrid = tf.cast(XYgrid, 'float32')
 
-        plot = _plot_3d(X, Y, np.zeros_like(X), ax, ['$t$', '$x$'], '', False)
+        # plot = _plot_3d(X, Y, np.zeros_like(X), ax, ['t', 'x'], '', False)
 
-        def data_gen(frame):
-            x, y = XYgrid[:, 0], XYgrid[:, 1]
-            z = solver.model(tf.transpose(tf.stack([tf.ones_like(x) * frame, x, y])))
-            Z = tf.reshape(z, X.shape)
+        # def data_gen(frame):
+        #     x, y = XYgrid[:, 0], XYgrid[:, 1]
+        #     z = solver.model(tf.transpose(tf.stack([tf.ones_like(x) * frame, x, y])))
+        #     Z = tf.reshape(z, X.shape)
 
-            ax.clear()
-            plot = ax.plot_surface(X, Y, Z, cmap='viridis')
-            ax.set_xlim(0, 1)
-            ax.set_ylim(0, 1)
-            ax.set_zlim(-0.1, 1)
+        #     ax.clear()
+        #     plot = ax.plot_surface(X, Y, Z, cmap='viridis')
+        #     ax.set_xlim(0, 1)
+        #     ax.set_ylim(0, 1)
+        #     ax.set_zlim(-0.1, 1)
 
-            title = ax.set_title("t = %.2f" % frame, ha='center')
-            return plot, title
+        #     title = ax.set_title("t = %.2f" % frame, ha='center')
+        #     return plot, title
+        
+        x, y = XYgrid[:, 0], XYgrid[:, 1]
+        zarray = np.zeros((N, N, 120))
 
-        anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 120),
-                             interval=16, blit=False)
+        for i in range(120):
+            z = solver.model(tf.transpose(tf.stack([tf.ones_like(x) * i, x, y])))
+            zarray[:, :, i] = tf.reshape(z, X.shape)
+
+        def update_plot(frame_number, zarray, plot):
+            plot[0].remove()
+            plot[0] = ax.plot_surface(X, Y, zarray[:,:,frame_number], cmap="magma")
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+
+        plot = [ax.plot_surface(X, Y, zarray[:, :, 0], color='0.75', rstride=1, cstride=1)]
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_zlim(-0.1, 1)
+        anim = FuncAnimation(fig, update_plot, 120, fargs=(zarray, plot), interval=16)
+
+        #anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 120),
+        #                     interval=16, blit=False)
 
         anim.save("../out/%s_solution.gif" % solver.bvp.__class__.__name__, fps=30)
         plt.show()
 
+    _outFolderExists()
     _plot_loss(solver)
     animate_solution()
 
