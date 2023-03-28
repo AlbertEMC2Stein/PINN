@@ -15,5 +15,4 @@ optim = tf.keras.optimizers.Adam(learning_rate=lr)
 # Train model and plot results
 solver.train(optim, lr, N, N)
 
-debug_plot_2D(solver, ('t', 'x'), (0, 1, -1, 1))
 error_plot_2D(solver, u, ('t', 'x'), (0, 1, -1, 1))

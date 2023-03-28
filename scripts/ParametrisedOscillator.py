@@ -12,13 +12,13 @@ class Oscillator(BoundaryValueProblem):
         return [
             Condition("initial",
                       lambda Du: Du["u"] - 1,
-                      (self.initial, 128)),
+                      (self.initial, 256)),
             Condition("initial_x",
                       lambda Du: Du["u_x"],
-                      (self.initial_x, 128)),
+                      (self.initial_x, 256)),
             Condition("inner",
                       lambda Du: Du["u_xx"] + Du["t"]**2 * Du["u"],
-                      (self.inner, 128))
+                      (self.inner, 256))
         ]
 
     @staticmethod
@@ -38,7 +38,7 @@ class Oscillator(BoundaryValueProblem):
 
 
 # Number of iterations
-N = 10000
+N = 20000
 
 # Initialize solver, learning rate scheduler and choose optimizer
 solver = Solver(Oscillator(), num_inputs=2, num_outputs=1, num_hidden_layers=4, num_neurons_per_layer=50)
