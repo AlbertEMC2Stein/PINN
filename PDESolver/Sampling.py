@@ -187,37 +187,6 @@ class Random(Sampler):
         return tf.random.uniform(shape=(1, n))
 
 
-class FirstRandom(Sampler):
-    def __init__(self):
-        """
-        Constructor for a FirstRandom Sampler class.
-
-        Attributes
-        -----------
-        isPersistent: boolean
-            Indicating whether the sampler is persistent
-        """
-
-        super().__init__()
-        self.isPersistent = True
-
-    def pick(self, n):
-        """
-        Samples n uniformly distributed points from [0; 1].
-        Same as Random but the with isPersistent=True.
-
-        Parameters
-        -----------
-        n: int
-            Number of points to sample
-
-        Returns
-        -----------
-        array: Array of shape (n,)
-        """
-        return tf.random.uniform(shape=(1, n))
-
-
 class Equidistant(Sampler):
     def __init__(self):
         """
