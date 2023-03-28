@@ -39,6 +39,27 @@ class Region:
         """
         ...
 
+    def __and__(self, other):
+        """
+        Returns the union of two regions.
+
+        Parameters
+        -----------
+        other: Region
+            Other region
+
+        Returns
+        -----------
+        Region
+        """
+        
+        if isinstance(other, Union):
+            return Union(*([self] + other.regions))
+        elif isinstance(self, Union):
+            return Union(*([other] + self.regions))
+        else:
+            return Union(self, other)
+
 
 class Cuboid(Region):
     def __init__(self, corner1, corner2):
@@ -111,7 +132,12 @@ class Union(Region):
         """
 
         super().__init__()
-        self.regions = regions
+
+        samples = [r.pick(1, Random()) for r in regions]
+        dimensions = [s.shape[1] for s in samples]
+        assert len(set(dimensions)) == 1, "All regions must have the same (shape-)dimension" 
+
+        self.regions = list(regions)
 
     def pick(self, n, sampler, ignore_samples=False):
         num_regions = len(self.regions)
