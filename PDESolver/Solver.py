@@ -190,8 +190,8 @@ class Solver:
             if i % debug_frequency == 0 or i == iterations - 1:
                 debug(gradients)
                 
-                n = min(i, 100)
-                color = plt.cm.rainbow(np.linspace(0, 1, n))
+                #n = min(i, 100)
+                #color = plt.cm.rainbow(np.linspace(0, 1, n))
                 #for j in range(n):
                 #    plt.scatter(*self.sample_history[j].numpy().T, s=0.5, c=[color[j]] * len(self.sample_history[j]), cmap='viridis')
                 
