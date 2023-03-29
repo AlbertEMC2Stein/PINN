@@ -74,31 +74,17 @@ class BoundaryValueProblem:
 
         return []
 
-    def calculate_differentials(self, model, freeVariables):
+    def get_specification(self):
         """
-        Calculates the differentials of the model at the given points.
-
-        Parameters
-        -----------
-        model: neural network
-            Model to calculate the differentials of
-        freeVariables: tensor
-            Tensor of points to calculate the differentials at
+        Returns the specification of the boundary value problem.
+        Right now, variables are only allowed to be single characters.
 
         Returns
         -----------
-        tensor: Tensor of differentials
+        dict: Specification of form {"components": [str], "variables": [str], "differentials": [str]}
         """
-    
-        ...
 
-    def get_debug_string(self):
-        debug = ""
-        for cond in self.get_conditions():
-            samples = len(cond.sample_points())
-            debug += "%s: %d\t" % (cond.name, samples)
-
-        return debug[:-1]
+        return {}
 
 
 class Laplace(BoundaryValueProblem):
