@@ -2,42 +2,30 @@ from PDESolver import *
 from numpy import pi
 
 class HelmholtzEquation(BoundaryValueProblem):
-
     def __init__(self):
         super().__init__()
         self.boundary = Union(Cuboid([-1, -1], [-1, 1]), Cuboid([-1, 1], [1, 1]), Cuboid([1, 1], [1, -1]), Cuboid([1, -1], [-1, -1]))
         self.inner = Cuboid([-1, -1], [1, 1])
 
-    def get_conditions(self):
-        def q(x, y):
-            return (-pi**2 - 16*pi**2 + 1) * tf.sin(pi * x) * tf.sin(4*pi * y) 
+        q = lambda x, y: (-pi**2 - 16*pi**2 + 1) * tf.sin(pi * x) * tf.sin(4*pi * y)
 
-        return [
-            Condition("boundary",
+        self.c1 = Condition("boundary",
                       lambda Du: Du["u"],
-                      (self.boundary, 128)),
-            Condition("inner",
+                      (self.boundary, 128))
+        
+        self. c2= Condition("inner",
                       lambda Du: Du["u_xx"] + Du["u_yy"] + Du["u"] - q(Du["x"], Du["y"]),
                       (self.inner, 128))
-        ]
 
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        with tf.GradientTape(persistent=True) as tape:
-            x, y = freeVariables[:, 0:1], freeVariables[:, 1:2]
+    def get_conditions(self):
+        return [self.c1, self.c2]
 
-            tape.watch(x)
-            tape.watch(y)
-
-            u = model(tf.stack([x[:, 0], y[:, 0]], axis=1))
-            u_x = tape.gradient(u, x)
-            u_xx = tape.gradient(u_x, x)
-            u_y = tape.gradient(u, y)
-            u_yy = tape.gradient(u_y, y)
-
-        del tape
-
-        return {"x": x, "y": y, "u": u, "u_xx": u_xx, "u_yy": u_yy}
+    def get_specification(self):
+        return {
+            "components": ["u"],
+            "variables": ["x", "y"],
+            "differentials": ["u_xx", "u_yy"],
+        }
 
 
 # Number of iterations
