@@ -88,12 +88,14 @@ class BoundaryValueProblem:
     Class for defining boundary value problems.
     """
 
-    def __init__(self):
+    def __init__(self, minibatch_size=128):
         """
         Constructor for a BoundaryValueProblem.
         """
 
-        ...
+        self.conditions = None
+        self.specification = None
+        self.minibatch_size = None
 
     def get_conditions(self):
         """
@@ -104,7 +106,7 @@ class BoundaryValueProblem:
         list: List of conditions
         """
 
-        return []
+        return self.conditions
 
     def get_specification(self):
         """
@@ -116,7 +118,7 @@ class BoundaryValueProblem:
         dict: Specification of form {"components": [str], "variables": [str], "differentials": [str]}
         """
 
-        return {}
+        return self.specification.as_dictionary()
 
 
 class Laplace(BoundaryValueProblem):
@@ -132,42 +134,23 @@ class Laplace(BoundaryValueProblem):
         """
 
         super().__init__()
-        self.zero_boundary = Union(Cuboid([0, 0], [0, 1]), Cuboid([0, 0], [1, 0]), Cuboid([1, 0], [1, 1]))
-        self.f_boundary = Cuboid([0, 1], [1, 1])
-        self.inner = Cuboid([0, 0], [1, 1])
-
-    def get_conditions(self):
-        return [
+ 
+        self.conditions = [
             Condition("zero_boundary",
                       lambda Du: Du["u"],
-                      (self.zero_boundary, 180)),
+                      (Cuboid([0, 0], [0, 1]) & Cuboid([0, 0], [1, 0]) & Cuboid([1, 0], [1, 1]), 128)),
+
             Condition("f_boundary",
-                      lambda Du: Du["u"] - tf.where(tf.abs(Du["x"] - 0.5) < 0.25, 1., 0.), #2 * Du["x"] * (1 - Du["x"]),
-                      (self.f_boundary, 400)),
+                      # tf.where(tf.abs(Du["x"] - 0.5) < 0.25, 1., 0.),
+                      lambda Du: Du["u"] - 2 * Du["x"] * (1 - Du["x"]),
+                      (Cuboid([0, 1], [1, 1]), 128)),
+
             Condition("inner",
                       lambda Du: Du["u_xx"] + Du["u_yy"],
-                      (self.inner, 1600))
+                      (Cuboid([0, 0], [1, 1]), 128))
         ]
 
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        with tf.GradientTape(persistent=True) as tape:
-            x, y = freeVariables[:, 0:1], freeVariables[:, 1:2]
-
-            tape.watch(x)
-            tape.watch(y)
-
-            u = model(tf.stack([x[:, 0], y[:, 0]], axis=1))
-
-            u_x = tape.gradient(u, x)
-            u_y = tape.gradient(u, y)
-
-            u_xx = tape.gradient(u_x, x)
-            u_yy = tape.gradient(u_y, y)
-
-        del tape
-
-        return {"x": x, "y": y, "u": u, "u_x": u_x, "u_y": u_y, "u_xx": u_xx, "u_yy": u_yy}
+        self.specification = Specification(["u"], ["x", "y"], ["u_xx", "u_yy"])
 
 
 class WaveEquation1D(BoundaryValueProblem):
@@ -177,49 +160,26 @@ class WaveEquation1D(BoundaryValueProblem):
     (t, x) ⟼ y
     """
 
-    def __init__(self):
+    def __init__(self, minibatch_size=128):
         """
         Constructor for a 1D wave equation.
         """
 
         super().__init__()
-        self.initial = Cuboid([0, -1], [0, 1])
-        self.boundary1 = Cuboid([0, -1], [0, 1])
-        self.inner = Cuboid([0, -1], [1, 1])
-
-    
-    def get_conditions(self):
-        return [
+        
+        self.conditions = [
             Condition("initial",
-                      lambda Du: Du["u"] - 1 / (200*(Du["x"] + 0.5)**2 + 1) - 1 / (200*(Du["x"] - 0.5)**2 + 2),
-                      (self.initial, 128)),
+                      lambda Du: Du["u"] - tf.exp(-25 * Du["x"]**2), #1 / (200*(Du["x"] + 0.5) ** 2 + 1) - 1 / (200*(Du["x"] - 0.5)**2 + 2),
+                      (Cuboid([0, -1], [0, 1]), None)),
             Condition("boundary1",
                       lambda Du: Du["u_t"],
-                      (self.boundary1, 128)),
+                      (Cuboid([0, -1], [0, 1]), None)),
             Condition("inner",
                       lambda Du: Du["u_tt"] - Du["u_xx"],
-                      (self.inner, 128))
+                      (Cuboid([0, -1], [1, 1]), None))
         ]
 
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        with tf.GradientTape(persistent=True) as tape:
-            t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
-
-            tape.watch(t)
-            tape.watch(x)
-
-            u = model(tf.stack([t[:, 0], x[:, 0]], axis=1))
-
-            u_t = tape.gradient(u, t)
-            u_x = tape.gradient(u, x)
-
-            u_tt = tape.gradient(u_t, t)
-            u_xx = tape.gradient(u_x, x)
-
-        del tape
-
-        return {"t": t, "x": x, "u": u, "u_t": u_t, "u_x": u_x, "u_tt": u_tt, "u_xx": u_xx}
+        self.specification = Specification(["u"], ["t", "x"], ["u_tt", "u_xx"])
 
 
 class WaveEquation2D(BoundaryValueProblem):
@@ -242,10 +202,10 @@ class WaveEquation2D(BoundaryValueProblem):
         return [
             Condition("initial_u",
                       lambda Du: Du["u"] - tf.exp(-Du["x"] ** 2 - Du["y"] ** 2) ** 4,
-                      (self.initial_u, 400)),
+                      (self.initial_u, 512)),
             Condition("inner",
                       lambda Du: Du["u_tt"] - Du["u_xx"] - Du["u_yy"],
-                      (self.inner, 4900))
+                      (self.inner, 512))
         ]
 
     @staticmethod
@@ -381,7 +341,7 @@ class BurgersEquation(BoundaryValueProblem):
     (t, x) ⟼ y
     """
 
-    def __init__(self):
+    def __init__(self, viscosity=0.01):
         """
         Constructor for a Burgers equation.
         """
@@ -390,18 +350,20 @@ class BurgersEquation(BoundaryValueProblem):
         self.initial = Cuboid([0, -1], [0, 1])
         self.boundary = Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1]))
         self.inner = Cuboid([0, -1], [1, 1])
+        self.viscosity = viscosity
 
     def get_conditions(self):
         return [
             Condition("initial",
                       lambda Du: Du["u"] + tf.sin(np.pi * Du["x"]),
-                      (self.initial, 200)),
+                      (self.initial, 512)),
             Condition("boundary",
                       lambda Du: Du["u"],
-                      (self.boundary, 200)),
+                      (self.boundary, 512)),
             Condition("inner",
-                      lambda Du: Du["u_t"] + Du["u"] * Du["u_x"] - 0.01 / np.pi * Du["u_xx"],
-                      (self.inner, 1600))
+                      lambda Du: Du["u_t"] + Du["u"] * Du["u_x"] -
+                      self.viscosity / np.pi * Du["u_xx"],
+                      (self.inner, 512))
         ]
 
     @staticmethod
@@ -703,7 +665,7 @@ class Pendulum(BoundaryValueProblem):
     def get_conditions(self):
         def initPos(t):
             return tf.concat([0 * t + 1, 0 * t], axis=1)
-        
+
         def initVel(t):
             return tf.concat([0 * t + 0, 0 * t + 0], axis=1)
 
@@ -724,6 +686,13 @@ class Pendulum(BoundaryValueProblem):
                       lambda Du: tf.norm(Du["u"], axis=1)**2 - 1.,
                       (self.constraint, 128))
         ]
+    
+    def get_specification(self):
+        return {
+            "components": ["x", "y", "lagrange"],
+            "variables": ["t"],
+            "differentials": ["x_tt", "y_tt", "lagrange_tt"],
+        }
 
     @staticmethod
     def calculate_differentials(model, freeVariables):
@@ -735,7 +704,6 @@ class Pendulum(BoundaryValueProblem):
 
         def lagrange(x):
             return model(x)[:, 2]
-
 
         with tf.GradientTape(persistent=True) as tape:
             t = freeVariables[:, 0:1]
