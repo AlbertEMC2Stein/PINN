@@ -284,7 +284,7 @@ def plot_phaseplot(solver):
     """
 
     def animate_solution():
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(5, 5))
 
         tspace = tf.linspace([0], [10], 600, axis=0)
         xy = solver.model(tspace)
@@ -292,11 +292,11 @@ def plot_phaseplot(solver):
         pendulum, = plt.plot([], [], 'lightgray')
         ln, = plt.plot([], [], 'cornflowerblue')
         sc, = plt.plot([], [], 'bo', markersize=10)
-        title = ax.text(0, 0.1, "", ha='center')
+        title = ax.text(0, 1.15, "", ha='center')
 
         def init():
             ax.set_xlim(-1.25, 1.25)
-            ax.set_ylim(-1.25, 0.25)
+            ax.set_ylim(-1.25, 1.25)
             return ln, sc, pendulum, title
 
         def update(frame):
@@ -312,7 +312,7 @@ def plot_phaseplot(solver):
         anim = FuncAnimation(fig, update, frames=np.arange(len(tspace)),
                             init_func=init, blit=True, interval=16)
 
-        anim.save("../out/%s_solution.gif" % solver.bvp.__class__.__name__, fps=60)
+        #anim.save("../out/%s_solution.gif" % solver.bvp.__class__.__name__, fps=60)
         plt.show()
 
     _outFolderExists()
