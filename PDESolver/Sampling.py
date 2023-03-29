@@ -10,7 +10,7 @@ class Region:
 
         pass
 
-    def pick(self, n, sampler, ignore_samples):
+    def pick(self, n, sampler):
         """
         Samples n points from the region.
 
@@ -20,8 +20,6 @@ class Region:
             Number of points to sample
         sampler: Sampler
             Sampler to use
-        ignore_samples: bool
-            If True, the samples are not stored the first time pick is called
 
         Returns
         -----------
@@ -79,13 +77,10 @@ class Cuboid(Region):
         self.corner2 = tf.constant(corner2, dtype=tf.float32)
         self.diff_idx = tf.reshape(tf.where(self.corner1 != self.corner2), [-1])
         self.dimension = len(self.diff_idx)
-        self.samples = None
 
-    def pick(self, n, sampler, ignore_samples=False):
-        if self.samples is not None and sampler.isPersistent:
-            tmp = self.samples
-        elif self.dimension == 0:
-            tmp = tf.ones((n, len(self.corner1))) * self.corner1
+    def pick(self, n, sampler):
+        if self.dimension == 0:
+            result = tf.ones((n, len(self.corner1))) * self.corner1
         else:
             start = tf.gather(self.corner1, self.diff_idx)
             end = tf.gather(self.corner2, self.diff_idx)
@@ -100,7 +95,7 @@ class Cuboid(Region):
             xy_vector = tf.concat([tf.reshape(variable, [-1, 1]) for variable in xy_matrix], axis=-1)
 
             n_approx = k**self.dimension
-            tmp = tf.ones((n_approx, len(self.corner1))) * self.corner1
+            result = tf.ones((n_approx, len(self.corner1))) * self.corner1
 
             row_idx = tf.range(n_approx, dtype=tf.int64)
             row_idx = tf.repeat(row_idx, self.dimension)
@@ -109,12 +104,9 @@ class Cuboid(Region):
             col_idx = tf.reshape(col_idx, [-1])
 
             indices = tf.transpose(tf.reshape(tf.concat([row_idx, col_idx], 0), [-1, n_approx * self.dimension]))
-            tmp = tf.tensor_scatter_nd_update(tmp, indices, tf.reshape(xy_vector, [-1]))
+            result = tf.tensor_scatter_nd_update(result, indices, tf.reshape(xy_vector, [-1]))
 
-            if self.samples is None and not ignore_samples:
-                self.samples = tmp
-
-        return tmp
+        return result
 
     def get_bounds(self):
         return self.corner1.numpy(), self.corner2.numpy()
@@ -139,12 +131,12 @@ class Union(Region):
 
         self.regions = list(regions)
 
-    def pick(self, n, sampler, ignore_samples=False):
+    def pick(self, n, sampler):
         num_regions = len(self.regions)
         ns = [n // num_regions] * num_regions
         ns[-1] += n % num_regions
 
-        return tf.concat([r.pick(ns[i], sampler, ignore_samples) for i, r in enumerate(self.regions)], axis=0)
+        return tf.concat([r.pick(ns[i], sampler) for i, r in enumerate(self.regions)], axis=0)
 
     def get_bounds(self):
         upper = tf.maximum([np.max(region.get_bounds()) for region in self.regions], axis=0)
@@ -157,14 +149,7 @@ class Sampler:
     def __init__(self):
         """
         Constructor for a Sampler class.
-
-        Attributes
-        -----------
-        isPersistent: boolean
-            Indicating whether the sampler is persistent
         """
-
-        self.isPersistent = None
 
     def pick(self, n):
         """
@@ -186,15 +171,9 @@ class Random(Sampler):
     def __init__(self):
         """
         Constructor for a Random Sampler class.
-
-        Attributes
-        -----------
-        isPersistent: boolean
-            Indicating whether the sampler is persistent
         """
 
         super().__init__()
-        self.isPersistent = False
 
     def pick(self, n):
         """
@@ -217,15 +196,9 @@ class Equidistant(Sampler):
     def __init__(self):
         """
         Constructor for a Equidistant Sampler class.
-
-        Attributes
-        -----------
-        isPersistent: boolean
-            Indicating whether the sampler is persistent
         """
 
         super().__init__()
-        self.isPersistent = True
 
     def pick(self, n):
         """
@@ -240,22 +213,17 @@ class Equidistant(Sampler):
         -----------
         array: Array of shape (n,)
         """
-        return tf.linspace(0, 1, n)
+
+        return tf.linspace(0., 1., n)
 
 
 class EquidistantRandom(Sampler):
     def __init__(self, n):
         """
         Constructor for a EquidistantRandom Sampler class.
-
-        Attributes
-        -----------
-        isPersistent: boolean
-            Indicating whether the sampler is persistent
         """
 
         super().__init__()
-        self.isPersistent = False
         self.n = n
         self.original = tf.linspace(0., 1., n)
 
