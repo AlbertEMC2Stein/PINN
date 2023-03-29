@@ -201,10 +201,12 @@ class Solver:
             n = len(self.loss_history)
             k = min(100, n)
             averaged_loss = np.convolve(self.loss_history, np.ones(k) / k, mode='same')
+            best_loss = np.min(self.loss_history)
 
             axs = subfigs[1].subplots(1, 2)
             axs[0].semilogy(range(n), self.loss_history, 'k-', lw=0.5)
             axs[0].semilogy(range(n), averaged_loss, 'r--', lw=1)
+            axs[0].axhline(best_loss, color='g', lw=0.5)
             axs[0].set_title('Loss History')
             axs[0].set_xlabel('Iteration')
             axs[0].set_ylabel('Loss')
@@ -254,17 +256,27 @@ class Solver:
             
             return loss, gradients, new_weight
 
+        best_loss = np.inf
+        iterations_since_last_improvement = 0
+        k_max = int(np.ceil(np.log10(iterations))) + 1
         pbar = tqdm(range(iterations), desc='Pending...')
+
         for i in pbar:
             loss, gradients, new_weight = train_step()
             
             self.loss_history += [loss.numpy()]
             
+            if loss.numpy() < best_loss:
+                best_loss = loss.numpy()
+                iterations_since_last_improvement = 0
+            else:
+                iterations_since_last_improvement += 1
+            
             if new_weight != -1:
                 self.weight_history += [new_weight.numpy()]
             
-            avgloss = np.mean(self.loss_history[-100:])
-            pbar.desc = 'øloss = {:10.8e} lr = {:.5f}'.format(avgloss, lr_scheduler(i))
+            avg_loss = np.mean(self.loss_history[-100:])
+            pbar.desc = f'øloss = {avg_loss:.3e} (best: {best_loss:.3e}, {iterations_since_last_improvement:0{k_max}d}it. ago) lr = {lr_scheduler(i):.5f}'
 
             if i % debug_frequency == 0 or i == iterations - 1:
                 debug(gradients)
