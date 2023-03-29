@@ -43,24 +43,12 @@ class KleinGordon(BoundaryValueProblem):
                       (self.inner, 128))
         ]
 
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        with tf.GradientTape(persistent=True) as tape:
-            t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
-
-            tape.watch(t)
-            tape.watch(x)
-
-            u = model(tf.stack([t[:, 0], x[:, 0]], axis=1))
-            u_t = tape.gradient(u, t)
-            u_tt = tape.gradient(u_t, t)
-            u_x = tape.gradient(u, x)
-            u_xx = tape.gradient(u_x, x)
-
-
-        del tape
-
-        return {"t": t, "x": x, "u": u, "u_t": u_t, "u_tt": u_tt, "u_xx": u_xx}
+    def get_specification(self):
+        return {
+            "components": ["u"],
+            "variables": ["t", "x"],
+            "differentials": ["u_tt", "u_xx"],
+        }
 
 
 # Number of iterations
