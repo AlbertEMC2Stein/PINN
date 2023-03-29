@@ -1,35 +1,6 @@
 from PDESolver.Sampling import *
 import tensorflow as tf
 
-def _extract_variables(conditions):
-    variables = {}
-    while True:
-        variable_missing = False
-        for cond in conditions:
-            try:
-                cond.residue_fn(variables)
-            except KeyError as e:
-                variable = str(e).replace("'", "")
-
-                variable_missing = True
-                variables[variable] = tf.constant(0, dtype=tf.float32)
-
-        if not variable_missing:
-            break
-
-    return variables
-
-def _compute_gradients(model, freeVariables, function_name, variable_names, needed_for_evaluation):
-    gradients = {}
-    with tf.GradientTape(persistent=True) as tape:
-        for i, variable_name in enumerate(variable_names):
-            gradients[variable_name] = freeVariables[:, i:i + 1]
-
-        del tape
-
-    return gradients
-
-
 
 class Condition:
     def __init__(self, name, residue_fn, region_samples_pair, sampler=Random()):
