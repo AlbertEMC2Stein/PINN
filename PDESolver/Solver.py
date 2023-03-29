@@ -16,7 +16,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
 class Solver:
-    def __init__(self, bvp, num_inputs=2, num_outputs=1, num_hidden_layers=4, num_neurons_per_layer=50):
+    def __init__(self, bvp, num_hidden_layers=4, num_neurons_per_layer=50):
         """
         Constructor for the Solver class.
 
@@ -24,12 +24,6 @@ class Solver:
         -----------
         bvp: BoundaryValueProblem
             Boundary value problem to be solved
-        num_inputs: int
-            Number of inputs to the neural network
-            Defaults to 2
-        num_outputs: int
-            Number of outputs from the neural network
-            Defaults to 1
         num_hidden_layers: int
             Number of hidden layers in the neural network
             Defaults to 4
@@ -38,11 +32,14 @@ class Solver:
             Defaults to 50
         """
 
+        num_inputs = len(bvp.get_specification()['variables'])
+        num_outputs = len(bvp.get_specification()['components'])
         inner_constraint = [condition for condition in bvp.get_conditions() if condition.name == 'inner'][0]
         mean, variance = inner_constraint.get_normalization_constants()
 
         self.model = init_model(num_inputs, num_outputs, num_hidden_layers, num_neurons_per_layer, mean, variance)
         self.bvp = bvp
+
         self.loss_history = []
         self.weight_history = [1]
         self.weights = None
