@@ -17,8 +17,6 @@ class Condition:
             Tuple of (region, number of samples)
         sampler: Sampler
             Sampler to use for sampling points in the region
-        weight: float
-            Weight of the condition
         """
 
         self.name = name
