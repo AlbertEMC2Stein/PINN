@@ -90,10 +90,9 @@ class Solver:
                     else:
                         differential_head_new = differential_head + variable
 
-                    gradient_dict[differential_head_new] = tape.gradient(gradient_dict[differential_head], gradient_dict[variable])
-                    differential_head = differential_head_new
-
-        del tape
+                    if not differential_head_new in gradient_dict:
+                        gradient_dict[differential_head_new] = tape.gradient(gradient_dict[differential_head], gradient_dict[variable])
+                        differential_head = differential_head_new
 
         return gradient_dict
    
@@ -155,8 +154,6 @@ class Solver:
             pdegrad = tape.gradient(pdeloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
             datagrad = tape.gradient(dataloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
             totalgrad = tape.gradient(totalloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
-
-        del tape
 
         return totalloss, (pdegrad, datagrad, totalgrad)
 
