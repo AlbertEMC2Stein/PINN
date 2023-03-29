@@ -276,7 +276,7 @@ class Solver:
                 self.weight_history += [new_weight.numpy()]
             
             avg_loss = np.mean(self.loss_history[-100:])
-            pbar.desc = f'øloss = {avg_loss:.3e} (best: {best_loss:.3e}, {iterations_since_last_improvement:0{k_max}d}it. ago) lr = {lr_scheduler(i):.5f}'
+            pbar.desc = f'øloss = {avg_loss:.3e} (best: {best_loss:.3e}, {iterations_since_last_improvement:0{k_max}d}it ago) lr = {lr_scheduler(i):.5f}'
 
             if i % debug_frequency == 0 or i == iterations - 1:
                 debug(gradients)
@@ -327,24 +327,25 @@ class ImprovedLinear(tf.keras.layers.Layer):
 
 
 class Linear(tf.keras.layers.Layer):
-    def __init__(self, inputs, outputs):
+    def __init__(self, inputs, outputs, activation=tf.tanh):
         super(Linear, self).__init__()
         self.inputs = inputs
         self.outputs = outputs
+        self.activation = activation
 
     def build(self, input_shape):  
         self.W = xavier_init([self.inputs, self.outputs]) 
         self.b = xavier_init([1, self.outputs])
 
     def call(self, inputs):  
-        return tf.add(tf.matmul(inputs, self.W), self.b)
+        return self.activation(tf.add(tf.matmul(inputs, self.W), self.b))
 
 
 def init_model(num_inputs, num_outputs, num_hidden_layers, num_neurons_per_layer, mean, variance):
     layer_sizes = [num_inputs] + [num_neurons_per_layer] * num_hidden_layers + [num_outputs] 
     layers = [Linear(layer_sizes[0], layer_sizes[1])] + \
              [ImprovedLinear(layer_sizes[i], layer_sizes[i + 1]) for i in range(1, len(layer_sizes) - 2)] + \
-             [Linear(layer_sizes[-2], layer_sizes[-1])]
+             [Linear(layer_sizes[-2], layer_sizes[-1], activation=tf.identity)]
 
     encoder_1 = Encoder(num_inputs, num_neurons_per_layer)
     encoder_2 = Encoder(num_inputs, num_neurons_per_layer)
