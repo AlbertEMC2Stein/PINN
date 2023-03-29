@@ -44,7 +44,121 @@ class Solver:
         self.weight_history = [1]
         self.weights = None
         self.step = None
-        self.sample_history = []
+
+    def compute_differentials(self, samplePoints):
+        """
+        Calculates the differentials of the model at the given points.
+
+        Parameters
+        -----------
+        model: neural network
+            Model to calculate the differentials of
+        samplePoints: tensor
+            Tensor of points to calculate the differentials at
+
+        Returns
+        -----------
+        gradient_dict: dict
+            Dictionary containing the differentials of the model needed for the bvp at the given points
+        """
+
+        specs = self.bvp.get_specification()
+
+        component_funs = {component: lambda x: self.model(x)[:, i] 
+                          for i, component in enumerate(specs["components"])}
+
+        gradient_dict = {}
+
+        with tf.GradientTape(persistent=True) as tape:
+            for i, variable in enumerate(specs["variables"]):
+                gradient_dict[variable] = samplePoints[:, i:i + 1]
+                tape.watch(gradient_dict[variable])
+
+            watched = [gradient_dict[variable] for variable in specs["variables"]]
+            for component in specs["components"]:
+                output = component_funs[component](tf.stack(watched, axis=1))
+                gradient_dict[component] = tf.reshape(output, (-1, 1))
+    
+            for differential in specs["differentials"]:
+                component = differential.split("_")[0]
+                variables = differential.split("_")[1]
+
+                differential_head = component 
+                for i, variable in enumerate(variables):
+                    if i == 0:
+                        differential_head_new = differential_head + "_" + variable
+                    else:
+                        differential_head_new = differential_head + variable
+
+                    gradient_dict[differential_head_new] = tape.gradient(gradient_dict[differential_head], gradient_dict[variable])
+                    differential_head = differential_head_new
+
+        del tape
+
+        return gradient_dict
+   
+    def compute_residuals(self):
+        """
+        Gets the residuals for the boundary value problem.
+
+        Returns
+        -----------
+        dict: Dictionary of residuals of form {condition_name: residual}
+        """
+
+        conditions = self.bvp.get_conditions()
+
+        residuals = {}
+        for condition in conditions:
+            samples = condition.sample_points()
+            Du = self.compute_differentials(samples)
+            residuals[condition.name] = condition.residue_fn(Du)
+
+        return residuals
+  
+    def compute_losses(self):
+        """
+        Computes the losses for the neural network.
+        
+        Returns
+        -----------
+        tuple: Tuple of losses for the PDE and data
+        """
+
+        criterion = tf.keras.losses.MeanSquaredError()
+        residuals = self.compute_residuals()
+
+        pdeloss = 0
+        dataloss = 0
+        for i, (name, residual) in enumerate(residuals.items()):
+            if name == 'inner':
+                pdeloss += self.weights[i] * criterion(residual, 0.0)
+            else:
+                dataloss += self.weights[i] * criterion(residual, 0.0)
+
+        return pdeloss, dataloss 
+ 
+    def compute_gradients(self):
+        """
+        Gets the gradients of the neural network.
+
+        Returns
+        -----------
+        tuple: Tuple of gradients
+        """
+
+        with tf.GradientTape(persistent=True) as tape:
+            tape.watch(self.model.trainable_variables)
+            pdeloss, dataloss = self.compute_losses()
+            totalloss = pdeloss + dataloss
+
+            pdegrad = tape.gradient(pdeloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
+            datagrad = tape.gradient(dataloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
+            totalgrad = tape.gradient(totalloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
+
+        del tape
+
+        return totalloss, (pdegrad, datagrad, totalgrad)
 
     def train(self, optimizer, lr_scheduler, iterations=10000, debug_frequency=2500):
         """
@@ -123,34 +237,6 @@ class Solver:
                     
             return result
 
-        def compute_losses():
-            criterion = tf.keras.losses.MeanSquaredError()
-
-            pdeloss = 0
-            dataloss = 0
-            for i, cond in enumerate(self.bvp.get_conditions()):
-                out, samples = cond(self.model, self.bvp)
-                if cond.name == 'inner':
-                    pdeloss += self.weights[i] * criterion(out, 0.0)
-                else:
-                    dataloss += self.weights[i] * criterion(out, 0.0)
-
-            return pdeloss, dataloss, samples 
-
-        def get_gradients():
-            with tf.GradientTape(persistent=True) as tape:
-                tape.watch(self.model.trainable_variables)
-                pdeloss, dataloss, samples = compute_losses()
-                totalloss = pdeloss + dataloss
-
-                pdegrad = tape.gradient(pdeloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
-                datagrad = tape.gradient(dataloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
-                totalgrad = tape.gradient(totalloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
-
-            del tape
-
-            return totalloss, (pdegrad, datagrad, totalgrad), samples
-
         @tf.function
         def train_step():
             if self.weights is None:
@@ -159,7 +245,7 @@ class Solver:
             if self.step is None:
                 self.step = tf.Variable(0)
             
-            loss, gradients, samples = get_gradients()
+            loss, gradients = self.compute_gradients()
             
             if self.step % 10 == 0:
                 new_weight = adjust_weights(gradients)
@@ -169,14 +255,13 @@ class Solver:
             optimizer.apply_gradients(zip(gradients[2], self.model.trainable_variables))
             self.step.assign(self.step + 1)
             
-            return loss, gradients, new_weight, samples
+            return loss, gradients, new_weight
 
         pbar = tqdm(range(iterations), desc='Pending...')
         for i in pbar:
-            loss, gradients, new_weight, samples = train_step()
+            loss, gradients, new_weight = train_step()
             
             self.loss_history += [loss.numpy()]
-            self.sample_history = self.sample_history[-99:] + [samples]
             
             if new_weight != -1:
                 self.weight_history += [new_weight.numpy()]
@@ -186,14 +271,6 @@ class Solver:
 
             if i % debug_frequency == 0 or i == iterations - 1:
                 debug(gradients)
-                
-                #n = min(i, 100)
-                #color = plt.cm.rainbow(np.linspace(0, 1, n))
-                #for j in range(n):
-                #    plt.scatter(*self.sample_history[j].numpy().T, s=0.5, c=[color[j]] * len(self.sample_history[j]), cmap='viridis')
-                
-                #plt.title("Samples generated in the last 100 iterations")
-                #plt.show()
 
 
 ###################################################################################
