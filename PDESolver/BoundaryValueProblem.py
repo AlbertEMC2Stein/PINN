@@ -39,7 +39,7 @@ class Condition:
         """
 
         return self._region.get_bounds()
-    
+
     def get_normalization_constants(self):
         """
         Returns the normalization constants of the region.
@@ -48,6 +48,7 @@ class Condition:
         -----------
         tuple: Tuple of (mean, variance)
         """
+
         return self._mean, self._variance
 
 
