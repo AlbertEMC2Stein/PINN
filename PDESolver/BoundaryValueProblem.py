@@ -52,18 +52,13 @@ class Condition:
 
         self.name = name
         self.residue_fn = residue_fn
-        self.sample_points = lambda: region_samples_pair[0].pick(region_samples_pair[1], sampler)
+        self.sample_points = lambda: region_samples_pair[0].pick(
+            region_samples_pair[1], sampler)
         self._region = region_samples_pair[0]
-        self.sampler = sampler
-
-        big_sample = region_samples_pair[0].pick(int(1e5), sampler, ignore_samples=True)
+        
+        big_sample = region_samples_pair[0].pick(int(1e5), sampler)
         self._mean = tf.math.reduce_mean(big_sample, 0)
         self._variance = tf.math.reduce_variance(big_sample, 0)
-        
-    def __call__(self, model, bvp):
-        samples = self.sample_points()
-        Du = bvp.calculate_differentials(model, samples)
-        return self.residue_fn(Du), samples
 
     def get_region_bounds(self):
         """
