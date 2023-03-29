@@ -32,6 +32,7 @@ import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
 def _outFolderExists():
@@ -42,12 +43,49 @@ def _outFolderExists():
 def _plot_loss(solver):
     fig = plt.figure(figsize=(9, 6))
     ax = fig.add_subplot(111)
-    ax.semilogy(range(len(solver.loss_history)), solver.loss_history, &#39;k-&#39;)
+
+    n = len(solver.loss_history)
+    k = min(100, n)
+    averaged_loss = np.convolve(solver.loss_history, np.ones(k) / k, mode=&#39;same&#39;)
+
+    ax.semilogy(range(n), solver.loss_history, &#39;k-&#39;, lw=0.5)
+    ax.semilogy(range(n), averaged_loss, &#39;r--&#39;, lw=1)
     ax.set_xlabel(&#39;$Iteration$&#39;)
     ax.set_ylabel(&#39;$Loss$&#39;)
-    ax.set_xlim(0, len(solver.loss_history))
+    ax.set_xlim(0, n - (1 if n &gt; 1 else 0))
     plt.show()
 
+
+def _plot_3d(X, Y, Z, ax, variables, title, show=True):
+    ax.view_init(35, 135)
+    ax.invert_xaxis()
+    ax.invert_yaxis()
+    ax.set_xlabel(&#39;$%s$&#39; % variables[0])
+    ax.set_ylabel(&#39;$%s$&#39; % variables[1])
+    ax.set_zlabel(&#39;$u(%s, %s)$&#39; % (variables[0], variables[1]))
+    ax.set_title(title)
+    
+    plot = ax.plot_surface(X, Y, Z, cmap=&#39;jet&#39;)
+    if show:
+        plt.show()
+
+    return plot
+
+
+def _plot_heatmap(X, Y, Z, ax, variables, title, show=True):
+    plot = ax.imshow(np.flip(Z, 0), cmap=&#39;jet&#39;, extent=[X.min(), X.max(), Y.min(), Y.max()], aspect=&#39;auto&#39;)
+    ax.set_xlabel(&#39;$%s$&#39; % variables[0])
+    ax.set_ylabel(&#39;$%s$&#39; % variables[1])
+    ax.set_title(title)
+
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes(&#34;right&#34;, size=&#34;5%&#34;, pad=0.05)
+    plt.colorbar(plot, cax=cax)
+    if show:
+        plt.show()
+
+    return plot
+    
 
 def plot_1D(solver):
     &#34;&#34;&#34;
@@ -62,7 +100,7 @@ def plot_1D(solver):
     def plot_sample_points():
         fig = plt.figure(figsize=(9, 6))
 
-        for cond in solver.bvp.conditions:
+        for cond in solver.bvp.get_conditions():
             t, x = cond.sample_points()[:, 0], cond.sample_points()[:, 1]
 
             if cond.name != &#39;inner&#39;:
@@ -79,13 +117,13 @@ def plot_1D(solver):
     def plot_u():
         # Set up meshgrid
         N = 1000
-        tspace = np.linspace(bounds[0][0], bounds[1][0], N + 1)
-        xspace = np.linspace(bounds[0][1], bounds[1][1], N + 1)
-        T, X = np.meshgrid(tspace, xspace)
-        Xgrid = np.vstack([T.flatten(), X.flatten()]).T
+        xspace = np.linspace(bounds[0][0], bounds[1][0], N + 1)
+        yspace = np.linspace(bounds[0][1], bounds[1][1], N + 1)
+        X, Y = np.meshgrid(xspace, yspace)
+        XYgrid = np.vstack([X.flatten(), Y.flatten()]).T
 
         # Determine predictions of u(t, x)
-        upred = solver.model(tf.cast(Xgrid, &#39;float32&#39;))[:, 0]
+        upred = solver.model(tf.cast(XYgrid, &#39;float32&#39;))[:, 0]
         minu, maxu = np.min(upred), np.max(upred)
 
         # Reshape upred
@@ -94,14 +132,9 @@ def plot_1D(solver):
         # Surface plot of solution u(t,x)
         fig = plt.figure(figsize=(9, 6))
         ax = fig.add_subplot(111, projection=&#39;3d&#39;)
-        ax.plot_surface(T, X, U, cmap=&#39;viridis&#39;)
-        ax.view_init(35, 35)
-        ax.set_xlabel(&#39;$t$&#39;)
-        ax.set_ylabel(&#39;$x$&#39;)
-        ax.set_zlabel(&#39;$u(t, x)$&#39;)
-        ax.set_title(&#39;Solution of equation&#39;)
-
-        plt.savefig(&#39;../out/3D_%s_solution.pdf&#39; % solver.bvp.__name__, bbox_inches=&#39;tight&#39;, dpi=300)
+        _plot_3d(X, Y, U, ax, [&#39;t&#39;, &#39;x&#39;], &#39;Solution of equation&#39;, False)
+        plt.savefig(&#39;../out/3D_%s_solution.pdf&#39; % solver.bvp.__class__.__name__, bbox_inches=&#39;tight&#39;, dpi=300)
+        plt.show()
 
         fig = plt.figure(figsize=(9, 6))
         plt.imshow(U, cmap=&#39;viridis&#39;)
@@ -109,7 +142,7 @@ def plot_1D(solver):
         ax.set_ylabel(&#39;$x$&#39;)
         ax.set_title(&#39;Solution of equation&#39;)
 
-        plt.savefig(&#39;../out/2D_%s_solution.pdf&#39; % solver.bvp.__name__, bbox_inches=&#39;tight&#39;, dpi=300)
+        plt.savefig(&#39;../out/2D_%s_solution.pdf&#39; % solver.bvp.__class__.__name__, bbox_inches=&#39;tight&#39;, dpi=300)
         plt.show()
 
         return minu, maxu
@@ -136,7 +169,7 @@ def plot_1D(solver):
         anim = FuncAnimation(fig, update, frames=np.linspace(bounds[0][0], bounds[1][0], 300),
                             interval=16, init_func=init, blit=True)
 
-        anim.save(&#34;../out/2D_%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
+        anim.save(&#34;../out/2D_%s_solution.gif&#34; % solver.bvp.__class__.__name__, fps=30)
         plt.show()
 
     inner = [cond for cond in solver.bvp.conditions if cond.name == &#34;inner&#34;][0]
@@ -170,28 +203,49 @@ def plot_2D(solver):
         XYgrid = np.vstack([X.flatten(), Y.flatten()]).T
         XYgrid = tf.cast(XYgrid, &#39;float32&#39;)
 
-        plot = ax.plot_surface(X, Y, 0 * X, cmap=&#39;viridis&#39;)
+        # plot = _plot_3d(X, Y, np.zeros_like(X), ax, [&#39;t&#39;, &#39;x&#39;], &#39;&#39;, False)
 
-        def data_gen(frame):
-            x, y = XYgrid[:, 0], XYgrid[:, 1]
-            z = solver.model(tf.transpose(tf.stack([tf.ones_like(x) * frame, x, y])))
-            Z = tf.reshape(z, X.shape)
+        # def data_gen(frame):
+        #     x, y = XYgrid[:, 0], XYgrid[:, 1]
+        #     z = solver.model(tf.transpose(tf.stack([tf.ones_like(x) * frame, x, y])))
+        #     Z = tf.reshape(z, X.shape)
 
-            ax.clear()
-            plot = ax.plot_surface(X, Y, Z, cmap=&#39;viridis&#39;)
-            ax.set_xlim(0, 1)
-            ax.set_ylim(0, 1)
-            ax.set_zlim(-0.1, 1)
+        #     ax.clear()
+        #     plot = ax.plot_surface(X, Y, Z, cmap=&#39;viridis&#39;)
+        #     ax.set_xlim(0, 1)
+        #     ax.set_ylim(0, 1)
+        #     ax.set_zlim(-0.1, 1)
 
-            title = ax.set_title(&#34;t = %.2f&#34; % frame, ha=&#39;center&#39;)
-            return plot, title
+        #     title = ax.set_title(&#34;t = %.2f&#34; % frame, ha=&#39;center&#39;)
+        #     return plot, title
+        
+        x, y = XYgrid[:, 0], XYgrid[:, 1]
+        zarray = np.zeros((N, N, 120))
 
-        anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 120),
-                             interval=16, blit=False)
+        for i in range(120):
+            z = solver.model(tf.transpose(tf.stack([tf.ones_like(x) * i, x, y])))
+            zarray[:, :, i] = tf.reshape(z, X.shape)
 
-        anim.save(&#34;../out/%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
+        def update_plot(frame_number, zarray, plot):
+            plot[0].remove()
+            plot[0] = ax.plot_surface(X, Y, zarray[:,:,frame_number], cmap=&#34;magma&#34;)
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection=&#39;3d&#39;)
+
+        plot = [ax.plot_surface(X, Y, zarray[:, :, 0], color=&#39;0.75&#39;, rstride=1, cstride=1)]
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_zlim(-0.1, 1)
+        anim = FuncAnimation(fig, update_plot, 120, fargs=(zarray, plot), interval=16)
+
+        #anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 120),
+        #                     interval=16, blit=False)
+
+        anim.save(&#34;../out/%s_solution.gif&#34; % solver.bvp.__class__.__name__, fps=30)
         plt.show()
 
+    _outFolderExists()
     _plot_loss(solver)
     animate_solution()
 
@@ -240,7 +294,7 @@ def plot_2Dvectorfield(solver):
         anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 240),
                              interval=16, blit=False)
 
-        anim.save(&#34;../out/%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
+        anim.save(&#34;../out/%s_solution.gif&#34; % solver.bvp.__class__.__name__, fps=30)
         plt.show()
 
     _outFolderExists()
@@ -287,12 +341,62 @@ def plot_phaseplot(solver):
         anim = FuncAnimation(fig, update, frames=np.arange(len(tspace)),
                             init_func=init, blit=True, interval=16)
 
-        anim.save(&#34;../out/%s_solution.gif&#34; % solver.bvp.__name__, fps=60)
+        anim.save(&#34;../out/%s_solution.gif&#34; % solver.bvp.__class__.__name__, fps=60)
         plt.show()
 
     _outFolderExists()
     _plot_loss(solver)
-    animate_solution()</code></pre>
+    animate_solution()
+
+
+def debug_plot_2D(solver, variables, domain):
+    N = 1000
+    xspace = np.linspace(domain[0], domain[1], N + 1)
+    yspace = np.linspace(domain[2], domain[3], N + 1)
+    X, Y = np.meshgrid(xspace, yspace)
+    XYgrid = np.vstack([X.flatten(), Y.flatten()]).T
+
+    upred = solver.model(tf.cast(XYgrid, &#39;float32&#39;))[:, 0]
+    
+    U = upred.numpy().reshape(N + 1, N + 1)
+
+    fig = plt.figure(figsize=(9, 6))
+    ax = fig.add_subplot(111, projection=&#39;3d&#39;)
+    _plot_3d(X, Y, U, ax, variables, &#39;Solution of equation&#39;)
+
+    plt.imshow(np.flip(U, 0), cmap=&#39;jet&#39;, extent=domain)
+    plt.colorbar()
+    plt.show()
+
+    _plot_loss(solver)
+
+
+def error_plot_2D(solver, exact_solution, variables, domain, heatmap=True):
+    N = 1000
+    xspace = np.linspace(domain[0], domain[1], N + 1)
+    yspace = np.linspace(domain[2], domain[3], N + 1)
+    X, Y = np.meshgrid(xspace, yspace)
+    XYgrid = np.vstack([X.flatten(), Y.flatten()]).T
+
+    upred = solver.model(tf.cast(XYgrid, &#39;float32&#39;))[:, 0]
+    U = upred.numpy().reshape(N + 1, N + 1)
+
+    fig = plt.figure(figsize=(18, 5))
+    plt.subplots_adjust(left=0.01, right=0.97)
+
+    options, plot_fun = ({&#39;projection&#39;: &#39;3d&#39;}, _plot_3d) if not heatmap else ({}, _plot_heatmap)
+
+    ax = fig.add_subplot(131, **options)
+    plot_fun(X, Y, exact_solution(X, Y), ax, variables, &#39;Exact solution&#39;, False)
+
+    ax = fig.add_subplot(132, **options)
+    plot_fun(X, Y, U, ax, variables, &#39;Predicted solution&#39;, False)
+
+    ax = fig.add_subplot(133)
+    _plot_heatmap(X, Y, np.abs(U - exact_solution(X, Y)), 
+                  ax, variables, &#39;Absolute Error&#39;, True)
+
+    _plot_loss(solver)</code></pre>
 </details>
 </section>
 <section>
@@ -302,6 +406,74 @@ def plot_phaseplot(solver):
 <section>
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
+<dt id="PDESolver.Visuals.debug_plot_2D"><code class="name flex">
+<span>def <span class="ident">debug_plot_2D</span></span>(<span>solver, variables, domain)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def debug_plot_2D(solver, variables, domain):
+    N = 1000
+    xspace = np.linspace(domain[0], domain[1], N + 1)
+    yspace = np.linspace(domain[2], domain[3], N + 1)
+    X, Y = np.meshgrid(xspace, yspace)
+    XYgrid = np.vstack([X.flatten(), Y.flatten()]).T
+
+    upred = solver.model(tf.cast(XYgrid, &#39;float32&#39;))[:, 0]
+    
+    U = upred.numpy().reshape(N + 1, N + 1)
+
+    fig = plt.figure(figsize=(9, 6))
+    ax = fig.add_subplot(111, projection=&#39;3d&#39;)
+    _plot_3d(X, Y, U, ax, variables, &#39;Solution of equation&#39;)
+
+    plt.imshow(np.flip(U, 0), cmap=&#39;jet&#39;, extent=domain)
+    plt.colorbar()
+    plt.show()
+
+    _plot_loss(solver)</code></pre>
+</details>
+</dd>
+<dt id="PDESolver.Visuals.error_plot_2D"><code class="name flex">
+<span>def <span class="ident">error_plot_2D</span></span>(<span>solver, exact_solution, variables, domain, heatmap=True)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def error_plot_2D(solver, exact_solution, variables, domain, heatmap=True):
+    N = 1000
+    xspace = np.linspace(domain[0], domain[1], N + 1)
+    yspace = np.linspace(domain[2], domain[3], N + 1)
+    X, Y = np.meshgrid(xspace, yspace)
+    XYgrid = np.vstack([X.flatten(), Y.flatten()]).T
+
+    upred = solver.model(tf.cast(XYgrid, &#39;float32&#39;))[:, 0]
+    U = upred.numpy().reshape(N + 1, N + 1)
+
+    fig = plt.figure(figsize=(18, 5))
+    plt.subplots_adjust(left=0.01, right=0.97)
+
+    options, plot_fun = ({&#39;projection&#39;: &#39;3d&#39;}, _plot_3d) if not heatmap else ({}, _plot_heatmap)
+
+    ax = fig.add_subplot(131, **options)
+    plot_fun(X, Y, exact_solution(X, Y), ax, variables, &#39;Exact solution&#39;, False)
+
+    ax = fig.add_subplot(132, **options)
+    plot_fun(X, Y, U, ax, variables, &#39;Predicted solution&#39;, False)
+
+    ax = fig.add_subplot(133)
+    _plot_heatmap(X, Y, np.abs(U - exact_solution(X, Y)), 
+                  ax, variables, &#39;Absolute Error&#39;, True)
+
+    _plot_loss(solver)</code></pre>
+</details>
+</dd>
 <dt id="PDESolver.Visuals.plot_1D"><code class="name flex">
 <span>def <span class="ident">plot_1D</span></span>(<span>solver)</span>
 </code></dt>
@@ -329,7 +501,7 @@ def plot_phaseplot(solver):
     def plot_sample_points():
         fig = plt.figure(figsize=(9, 6))
 
-        for cond in solver.bvp.conditions:
+        for cond in solver.bvp.get_conditions():
             t, x = cond.sample_points()[:, 0], cond.sample_points()[:, 1]
 
             if cond.name != &#39;inner&#39;:
@@ -346,13 +518,13 @@ def plot_phaseplot(solver):
     def plot_u():
         # Set up meshgrid
         N = 1000
-        tspace = np.linspace(bounds[0][0], bounds[1][0], N + 1)
-        xspace = np.linspace(bounds[0][1], bounds[1][1], N + 1)
-        T, X = np.meshgrid(tspace, xspace)
-        Xgrid = np.vstack([T.flatten(), X.flatten()]).T
+        xspace = np.linspace(bounds[0][0], bounds[1][0], N + 1)
+        yspace = np.linspace(bounds[0][1], bounds[1][1], N + 1)
+        X, Y = np.meshgrid(xspace, yspace)
+        XYgrid = np.vstack([X.flatten(), Y.flatten()]).T
 
         # Determine predictions of u(t, x)
-        upred = solver.model(tf.cast(Xgrid, &#39;float32&#39;))[:, 0]
+        upred = solver.model(tf.cast(XYgrid, &#39;float32&#39;))[:, 0]
         minu, maxu = np.min(upred), np.max(upred)
 
         # Reshape upred
@@ -361,14 +533,9 @@ def plot_phaseplot(solver):
         # Surface plot of solution u(t,x)
         fig = plt.figure(figsize=(9, 6))
         ax = fig.add_subplot(111, projection=&#39;3d&#39;)
-        ax.plot_surface(T, X, U, cmap=&#39;viridis&#39;)
-        ax.view_init(35, 35)
-        ax.set_xlabel(&#39;$t$&#39;)
-        ax.set_ylabel(&#39;$x$&#39;)
-        ax.set_zlabel(&#39;$u(t, x)$&#39;)
-        ax.set_title(&#39;Solution of equation&#39;)
-
-        plt.savefig(&#39;../out/3D_%s_solution.pdf&#39; % solver.bvp.__name__, bbox_inches=&#39;tight&#39;, dpi=300)
+        _plot_3d(X, Y, U, ax, [&#39;t&#39;, &#39;x&#39;], &#39;Solution of equation&#39;, False)
+        plt.savefig(&#39;../out/3D_%s_solution.pdf&#39; % solver.bvp.__class__.__name__, bbox_inches=&#39;tight&#39;, dpi=300)
+        plt.show()
 
         fig = plt.figure(figsize=(9, 6))
         plt.imshow(U, cmap=&#39;viridis&#39;)
@@ -376,7 +543,7 @@ def plot_phaseplot(solver):
         ax.set_ylabel(&#39;$x$&#39;)
         ax.set_title(&#39;Solution of equation&#39;)
 
-        plt.savefig(&#39;../out/2D_%s_solution.pdf&#39; % solver.bvp.__name__, bbox_inches=&#39;tight&#39;, dpi=300)
+        plt.savefig(&#39;../out/2D_%s_solution.pdf&#39; % solver.bvp.__class__.__name__, bbox_inches=&#39;tight&#39;, dpi=300)
         plt.show()
 
         return minu, maxu
@@ -403,7 +570,7 @@ def plot_phaseplot(solver):
         anim = FuncAnimation(fig, update, frames=np.linspace(bounds[0][0], bounds[1][0], 300),
                             interval=16, init_func=init, blit=True)
 
-        anim.save(&#34;../out/2D_%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
+        anim.save(&#34;../out/2D_%s_solution.gif&#34; % solver.bvp.__class__.__name__, fps=30)
         plt.show()
 
     inner = [cond for cond in solver.bvp.conditions if cond.name == &#34;inner&#34;][0]
@@ -451,28 +618,49 @@ def plot_phaseplot(solver):
         XYgrid = np.vstack([X.flatten(), Y.flatten()]).T
         XYgrid = tf.cast(XYgrid, &#39;float32&#39;)
 
-        plot = ax.plot_surface(X, Y, 0 * X, cmap=&#39;viridis&#39;)
+        # plot = _plot_3d(X, Y, np.zeros_like(X), ax, [&#39;t&#39;, &#39;x&#39;], &#39;&#39;, False)
 
-        def data_gen(frame):
-            x, y = XYgrid[:, 0], XYgrid[:, 1]
-            z = solver.model(tf.transpose(tf.stack([tf.ones_like(x) * frame, x, y])))
-            Z = tf.reshape(z, X.shape)
+        # def data_gen(frame):
+        #     x, y = XYgrid[:, 0], XYgrid[:, 1]
+        #     z = solver.model(tf.transpose(tf.stack([tf.ones_like(x) * frame, x, y])))
+        #     Z = tf.reshape(z, X.shape)
 
-            ax.clear()
-            plot = ax.plot_surface(X, Y, Z, cmap=&#39;viridis&#39;)
-            ax.set_xlim(0, 1)
-            ax.set_ylim(0, 1)
-            ax.set_zlim(-0.1, 1)
+        #     ax.clear()
+        #     plot = ax.plot_surface(X, Y, Z, cmap=&#39;viridis&#39;)
+        #     ax.set_xlim(0, 1)
+        #     ax.set_ylim(0, 1)
+        #     ax.set_zlim(-0.1, 1)
 
-            title = ax.set_title(&#34;t = %.2f&#34; % frame, ha=&#39;center&#39;)
-            return plot, title
+        #     title = ax.set_title(&#34;t = %.2f&#34; % frame, ha=&#39;center&#39;)
+        #     return plot, title
+        
+        x, y = XYgrid[:, 0], XYgrid[:, 1]
+        zarray = np.zeros((N, N, 120))
 
-        anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 120),
-                             interval=16, blit=False)
+        for i in range(120):
+            z = solver.model(tf.transpose(tf.stack([tf.ones_like(x) * i, x, y])))
+            zarray[:, :, i] = tf.reshape(z, X.shape)
 
-        anim.save(&#34;../out/%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
+        def update_plot(frame_number, zarray, plot):
+            plot[0].remove()
+            plot[0] = ax.plot_surface(X, Y, zarray[:,:,frame_number], cmap=&#34;magma&#34;)
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection=&#39;3d&#39;)
+
+        plot = [ax.plot_surface(X, Y, zarray[:, :, 0], color=&#39;0.75&#39;, rstride=1, cstride=1)]
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_zlim(-0.1, 1)
+        anim = FuncAnimation(fig, update_plot, 120, fargs=(zarray, plot), interval=16)
+
+        #anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 120),
+        #                     interval=16, blit=False)
+
+        anim.save(&#34;../out/%s_solution.gif&#34; % solver.bvp.__class__.__name__, fps=30)
         plt.show()
 
+    _outFolderExists()
     _plot_loss(solver)
     animate_solution()</code></pre>
 </details>
@@ -535,7 +723,7 @@ def plot_phaseplot(solver):
         anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 240),
                              interval=16, blit=False)
 
-        anim.save(&#34;../out/%s_solution.gif&#34; % solver.bvp.__name__, fps=30)
+        anim.save(&#34;../out/%s_solution.gif&#34; % solver.bvp.__class__.__name__, fps=30)
         plt.show()
 
     _outFolderExists()
@@ -596,7 +784,7 @@ def plot_phaseplot(solver):
         anim = FuncAnimation(fig, update, frames=np.arange(len(tspace)),
                             init_func=init, blit=True, interval=16)
 
-        anim.save(&#34;../out/%s_solution.gif&#34; % solver.bvp.__name__, fps=60)
+        anim.save(&#34;../out/%s_solution.gif&#34; % solver.bvp.__class__.__name__, fps=60)
         plt.show()
 
     _outFolderExists()
@@ -621,7 +809,9 @@ def plot_phaseplot(solver):
 </ul>
 </li>
 <li><h3><a href="#header-functions">Functions</a></h3>
-<ul class="">
+<ul class="two-column">
+<li><code><a title="PDESolver.Visuals.debug_plot_2D" href="#PDESolver.Visuals.debug_plot_2D">debug_plot_2D</a></code></li>
+<li><code><a title="PDESolver.Visuals.error_plot_2D" href="#PDESolver.Visuals.error_plot_2D">error_plot_2D</a></code></li>
 <li><code><a title="PDESolver.Visuals.plot_1D" href="#PDESolver.Visuals.plot_1D">plot_1D</a></code></li>
 <li><code><a title="PDESolver.Visuals.plot_2D" href="#PDESolver.Visuals.plot_2D">plot_2D</a></code></li>
 <li><code><a title="PDESolver.Visuals.plot_2Dvectorfield" href="#PDESolver.Visuals.plot_2Dvectorfield">plot_2Dvectorfield</a></code></li>

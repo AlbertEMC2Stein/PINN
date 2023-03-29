@@ -66,6 +66,27 @@ class Region:
         &#34;&#34;&#34;
         ...
 
+    def __and__(self, other):
+        &#34;&#34;&#34;
+        Returns the union of two regions.
+
+        Parameters
+        -----------
+        other: Region
+            Other region
+
+        Returns
+        -----------
+        Region
+        &#34;&#34;&#34;
+        
+        if isinstance(other, Union):
+            return Union(*([self] + other.regions))
+        elif isinstance(self, Union):
+            return Union(*([other] + self.regions))
+        else:
+            return Union(self, other)
+
 
 class Cuboid(Region):
     def __init__(self, corner1, corner2):
@@ -81,42 +102,43 @@ class Cuboid(Region):
         &#34;&#34;&#34;
 
         super().__init__()
-        self.corner1 = np.array(corner1)
-        self.corner2 = np.array(corner2)
-        self.diff_idx = np.where(self.corner1 != self.corner2)[0]
-        self.dimension = self.diff_idx.size
-        self.samples = None
-
-        if self.dimension == 0:
-            self.diff_idx = np.array([0])
-            self.dimension = 1
+        self.corner1 = tf.constant(corner1, dtype=tf.float32)
+        self.corner2 = tf.constant(corner2, dtype=tf.float32)
+        self.diff_idx = tf.reshape(tf.where(self.corner1 != self.corner2), [-1])
+        self.dimension = len(self.diff_idx)
 
     def pick(self, n, sampler):
-        if self.samples is not None and sampler.isPersistent:
-            tmp = self.samples
+        if self.dimension == 0:
+            result = tf.ones((n, len(self.corner1))) * self.corner1
         else:
-            start = self.corner1[self.diff_idx]
-            end = self.corner2[self.diff_idx]
+            start = tf.gather(self.corner1, self.diff_idx)
+            end = tf.gather(self.corner2, self.diff_idx)
 
-            k = int(np.ceil(n**(1 / self.dimension)))
+            k = tf.cast(tf.math.ceil(n**(1 / self.dimension)), tf.int64)
             lines = []
             for i in range(self.dimension):
                 ts = sampler.pick(k)
                 lines += [(1 - ts) * start[i] + ts * end[i]]
 
-            x = np.meshgrid(*lines)
-            y = np.stack(list(map(np.ravel, x))).T
+            xy_matrix = tf.meshgrid(*lines)
+            xy_vector = tf.concat([tf.reshape(variable, [-1, 1]) for variable in xy_matrix], axis=-1)
 
-            tmp = np.ones((len(y), len(self.corner1))) * self.corner1
-            tmp[:, self.diff_idx] = y
+            n_approx = k**self.dimension
+            result = tf.ones((n_approx, len(self.corner1))) * self.corner1
 
-            if self.samples is None:
-                self.samples = tmp
+            row_idx = tf.range(n_approx, dtype=tf.int64)
+            row_idx = tf.repeat(row_idx, self.dimension)
 
-        return tf.constant(tmp, &#34;float32&#34;)
+            col_idx = tf.transpose(tf.tile(self.diff_idx[:, tf.newaxis], [1, n_approx]))
+            col_idx = tf.reshape(col_idx, [-1])
+
+            indices = tf.transpose(tf.reshape(tf.concat([row_idx, col_idx], 0), [-1, n_approx * self.dimension]))
+            result = tf.tensor_scatter_nd_update(result, indices, tf.reshape(xy_vector, [-1]))
+
+        return result
 
     def get_bounds(self):
-        return self.corner1, self.corner2
+        return self.corner1.numpy(), self.corner2.numpy()
 
 
 class Union(Region):
@@ -131,7 +153,12 @@ class Union(Region):
         &#34;&#34;&#34;
 
         super().__init__()
-        self.regions = regions
+
+        samples = [r.pick(1, Random()) for r in regions]
+        dimensions = [s.shape[1] for s in samples]
+        assert len(set(dimensions)) == 1, &#34;All regions must have the same (shape-)dimension&#34; 
+
+        self.regions = list(regions)
 
     def pick(self, n, sampler):
         num_regions = len(self.regions)
@@ -151,14 +178,7 @@ class Sampler:
     def __init__(self):
         &#34;&#34;&#34;
         Constructor for a Sampler class.
-
-        Attributes
-        -----------
-        isPersistent: boolean
-            Indicating whether the sampler is persistent
         &#34;&#34;&#34;
-
-        self.isPersistent = None
 
     def pick(self, n):
         &#34;&#34;&#34;
@@ -180,15 +200,9 @@ class Random(Sampler):
     def __init__(self):
         &#34;&#34;&#34;
         Constructor for a Random Sampler class.
-
-        Attributes
-        -----------
-        isPersistent: boolean
-            Indicating whether the sampler is persistent
         &#34;&#34;&#34;
 
         super().__init__()
-        self.isPersistent = False
 
     def pick(self, n):
         &#34;&#34;&#34;
@@ -204,53 +218,16 @@ class Random(Sampler):
         array: Array of shape (n,)
         &#34;&#34;&#34;
 
-        return np.random.uniform(size=(1,n))
-
-
-class FirstRandom(Sampler):
-    def __init__(self):
-        &#34;&#34;&#34;
-        Constructor for a FirstRandom Sampler class.
-
-        Attributes
-        -----------
-        isPersistent: boolean
-            Indicating whether the sampler is persistent
-        &#34;&#34;&#34;
-
-        super().__init__()
-        self.isPersistent = True
-
-    def pick(self, n):
-        &#34;&#34;&#34;
-        Samples n uniformly distributed points from [0; 1].
-        Same as Random but the with isPersistent=True.
-
-        Parameters
-        -----------
-        n: int
-            Number of points to sample
-
-        Returns
-        -----------
-        array: Array of shape (n,)
-        &#34;&#34;&#34;
-        return np.random.uniform(size=(1,n))
+        return tf.random.uniform(shape=(1, n))
 
 
 class Equidistant(Sampler):
     def __init__(self):
         &#34;&#34;&#34;
         Constructor for a Equidistant Sampler class.
-
-        Attributes
-        -----------
-        isPersistent: boolean
-            Indicating whether the sampler is persistent
         &#34;&#34;&#34;
 
         super().__init__()
-        self.isPersistent = True
 
     def pick(self, n):
         &#34;&#34;&#34;
@@ -265,7 +242,36 @@ class Equidistant(Sampler):
         -----------
         array: Array of shape (n,)
         &#34;&#34;&#34;
-        return np.linspace(0, 1, n)</code></pre>
+
+        return tf.linspace(0., 1., n)
+
+
+class EquidistantRandom(Sampler):
+    def __init__(self, n):
+        &#34;&#34;&#34;
+        Constructor for a EquidistantRandom Sampler class.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.n = n
+        self.original = tf.linspace(0., 1., n)
+
+    def pick(self, n):
+        &#34;&#34;&#34;
+        Samples n equidistant points from [0; 1] with a random offset.
+
+        Parameters
+        -----------
+        n: int
+            Number of points to sample
+
+        Returns
+        -----------
+        array: Array of shape (n,)
+        &#34;&#34;&#34;
+
+        idx = tf.random.uniform(shape=(int(n),), minval=0, maxval=self.n - 1, dtype=tf.int64)
+        return tf.gather(self.original, idx)[tf.newaxis, :]</code></pre>
 </details>
 </section>
 <section>
@@ -308,42 +314,43 @@ class Equidistant(Sampler):
         &#34;&#34;&#34;
 
         super().__init__()
-        self.corner1 = np.array(corner1)
-        self.corner2 = np.array(corner2)
-        self.diff_idx = np.where(self.corner1 != self.corner2)[0]
-        self.dimension = self.diff_idx.size
-        self.samples = None
-
-        if self.dimension == 0:
-            self.diff_idx = np.array([0])
-            self.dimension = 1
+        self.corner1 = tf.constant(corner1, dtype=tf.float32)
+        self.corner2 = tf.constant(corner2, dtype=tf.float32)
+        self.diff_idx = tf.reshape(tf.where(self.corner1 != self.corner2), [-1])
+        self.dimension = len(self.diff_idx)
 
     def pick(self, n, sampler):
-        if self.samples is not None and sampler.isPersistent:
-            tmp = self.samples
+        if self.dimension == 0:
+            result = tf.ones((n, len(self.corner1))) * self.corner1
         else:
-            start = self.corner1[self.diff_idx]
-            end = self.corner2[self.diff_idx]
+            start = tf.gather(self.corner1, self.diff_idx)
+            end = tf.gather(self.corner2, self.diff_idx)
 
-            k = int(np.ceil(n**(1 / self.dimension)))
+            k = tf.cast(tf.math.ceil(n**(1 / self.dimension)), tf.int64)
             lines = []
             for i in range(self.dimension):
                 ts = sampler.pick(k)
                 lines += [(1 - ts) * start[i] + ts * end[i]]
 
-            x = np.meshgrid(*lines)
-            y = np.stack(list(map(np.ravel, x))).T
+            xy_matrix = tf.meshgrid(*lines)
+            xy_vector = tf.concat([tf.reshape(variable, [-1, 1]) for variable in xy_matrix], axis=-1)
 
-            tmp = np.ones((len(y), len(self.corner1))) * self.corner1
-            tmp[:, self.diff_idx] = y
+            n_approx = k**self.dimension
+            result = tf.ones((n_approx, len(self.corner1))) * self.corner1
 
-            if self.samples is None:
-                self.samples = tmp
+            row_idx = tf.range(n_approx, dtype=tf.int64)
+            row_idx = tf.repeat(row_idx, self.dimension)
 
-        return tf.constant(tmp, &#34;float32&#34;)
+            col_idx = tf.transpose(tf.tile(self.diff_idx[:, tf.newaxis], [1, n_approx]))
+            col_idx = tf.reshape(col_idx, [-1])
+
+            indices = tf.transpose(tf.reshape(tf.concat([row_idx, col_idx], 0), [-1, n_approx * self.dimension]))
+            result = tf.tensor_scatter_nd_update(result, indices, tf.reshape(xy_vector, [-1]))
+
+        return result
 
     def get_bounds(self):
-        return self.corner1, self.corner2</code></pre>
+        return self.corner1.numpy(), self.corner2.numpy()</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
@@ -363,12 +370,7 @@ class Equidistant(Sampler):
 <span>class <span class="ident">Equidistant</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Constructor for a Equidistant Sampler class.</p>
-<h2 id="attributes">Attributes</h2>
-<dl>
-<dt><strong><code>isPersistent</code></strong> :&ensp;<code>boolean</code></dt>
-<dd>Indicating whether the sampler is persistent</dd>
-</dl></div>
+<div class="desc"><p>Constructor for a Equidistant Sampler class.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -377,15 +379,9 @@ class Equidistant(Sampler):
     def __init__(self):
         &#34;&#34;&#34;
         Constructor for a Equidistant Sampler class.
-
-        Attributes
-        -----------
-        isPersistent: boolean
-            Indicating whether the sampler is persistent
         &#34;&#34;&#34;
 
         super().__init__()
-        self.isPersistent = True
 
     def pick(self, n):
         &#34;&#34;&#34;
@@ -400,7 +396,8 @@ class Equidistant(Sampler):
         -----------
         array: Array of shape (n,)
         &#34;&#34;&#34;
-        return np.linspace(0, 1, n)</code></pre>
+
+        return tf.linspace(0., 1., n)</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
@@ -440,43 +437,35 @@ class Equidistant(Sampler):
     -----------
     array: Array of shape (n,)
     &#34;&#34;&#34;
-    return np.linspace(0, 1, n)</code></pre>
+
+    return tf.linspace(0., 1., n)</code></pre>
 </details>
 </dd>
 </dl>
 </dd>
-<dt id="PDESolver.Sampling.FirstRandom"><code class="flex name class">
-<span>class <span class="ident">FirstRandom</span></span>
+<dt id="PDESolver.Sampling.EquidistantRandom"><code class="flex name class">
+<span>class <span class="ident">EquidistantRandom</span></span>
+<span>(</span><span>n)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Constructor for a FirstRandom Sampler class.</p>
-<h2 id="attributes">Attributes</h2>
-<dl>
-<dt><strong><code>isPersistent</code></strong> :&ensp;<code>boolean</code></dt>
-<dd>Indicating whether the sampler is persistent</dd>
-</dl></div>
+<div class="desc"><p>Constructor for a EquidistantRandom Sampler class.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">class FirstRandom(Sampler):
-    def __init__(self):
+<pre><code class="python">class EquidistantRandom(Sampler):
+    def __init__(self, n):
         &#34;&#34;&#34;
-        Constructor for a FirstRandom Sampler class.
-
-        Attributes
-        -----------
-        isPersistent: boolean
-            Indicating whether the sampler is persistent
+        Constructor for a EquidistantRandom Sampler class.
         &#34;&#34;&#34;
 
         super().__init__()
-        self.isPersistent = True
+        self.n = n
+        self.original = tf.linspace(0., 1., n)
 
     def pick(self, n):
         &#34;&#34;&#34;
-        Samples n uniformly distributed points from [0; 1].
-        Same as Random but the with isPersistent=True.
+        Samples n equidistant points from [0; 1] with a random offset.
 
         Parameters
         -----------
@@ -487,7 +476,9 @@ class Equidistant(Sampler):
         -----------
         array: Array of shape (n,)
         &#34;&#34;&#34;
-        return np.random.uniform(size=(1,n))</code></pre>
+
+        idx = tf.random.uniform(shape=(int(n),), minval=0, maxval=self.n - 1, dtype=tf.int64)
+        return tf.gather(self.original, idx)[tf.newaxis, :]</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
@@ -495,12 +486,11 @@ class Equidistant(Sampler):
 </ul>
 <h3>Methods</h3>
 <dl>
-<dt id="PDESolver.Sampling.FirstRandom.pick"><code class="name flex">
+<dt id="PDESolver.Sampling.EquidistantRandom.pick"><code class="name flex">
 <span>def <span class="ident">pick</span></span>(<span>self, n)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Samples n uniformly distributed points from [0; 1].
-Same as Random but the with isPersistent=True.</p>
+<div class="desc"><p>Samples n equidistant points from [0; 1] with a random offset.</p>
 <h2 id="parameters">Parameters</h2>
 <dl>
 <dt><strong><code>n</code></strong> :&ensp;<code>int</code></dt>
@@ -517,8 +507,7 @@ Same as Random but the with isPersistent=True.</p>
 </summary>
 <pre><code class="python">def pick(self, n):
     &#34;&#34;&#34;
-    Samples n uniformly distributed points from [0; 1].
-    Same as Random but the with isPersistent=True.
+    Samples n equidistant points from [0; 1] with a random offset.
 
     Parameters
     -----------
@@ -529,7 +518,9 @@ Same as Random but the with isPersistent=True.</p>
     -----------
     array: Array of shape (n,)
     &#34;&#34;&#34;
-    return np.random.uniform(size=(1,n))</code></pre>
+
+    idx = tf.random.uniform(shape=(int(n),), minval=0, maxval=self.n - 1, dtype=tf.int64)
+    return tf.gather(self.original, idx)[tf.newaxis, :]</code></pre>
 </details>
 </dd>
 </dl>
@@ -538,12 +529,7 @@ Same as Random but the with isPersistent=True.</p>
 <span>class <span class="ident">Random</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Constructor for a Random Sampler class.</p>
-<h2 id="attributes">Attributes</h2>
-<dl>
-<dt><strong><code>isPersistent</code></strong> :&ensp;<code>boolean</code></dt>
-<dd>Indicating whether the sampler is persistent</dd>
-</dl></div>
+<div class="desc"><p>Constructor for a Random Sampler class.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -552,15 +538,9 @@ Same as Random but the with isPersistent=True.</p>
     def __init__(self):
         &#34;&#34;&#34;
         Constructor for a Random Sampler class.
-
-        Attributes
-        -----------
-        isPersistent: boolean
-            Indicating whether the sampler is persistent
         &#34;&#34;&#34;
 
         super().__init__()
-        self.isPersistent = False
 
     def pick(self, n):
         &#34;&#34;&#34;
@@ -576,7 +556,7 @@ Same as Random but the with isPersistent=True.</p>
         array: Array of shape (n,)
         &#34;&#34;&#34;
 
-        return np.random.uniform(size=(1,n))</code></pre>
+        return tf.random.uniform(shape=(1, n))</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
@@ -617,7 +597,7 @@ Same as Random but the with isPersistent=True.</p>
     array: Array of shape (n,)
     &#34;&#34;&#34;
 
-    return np.random.uniform(size=(1,n))</code></pre>
+    return tf.random.uniform(shape=(1, n))</code></pre>
 </details>
 </dd>
 </dl>
@@ -664,7 +644,28 @@ Same as Random but the with isPersistent=True.</p>
         -----------
         array: Array of shape (2, dimension)
         &#34;&#34;&#34;
-        ...</code></pre>
+        ...
+
+    def __and__(self, other):
+        &#34;&#34;&#34;
+        Returns the union of two regions.
+
+        Parameters
+        -----------
+        other: Region
+            Other region
+
+        Returns
+        -----------
+        Region
+        &#34;&#34;&#34;
+        
+        if isinstance(other, Union):
+            return Union(*([self] + other.regions))
+        elif isinstance(self, Union):
+            return Union(*([other] + self.regions))
+        else:
+            return Union(self, other)</code></pre>
 </details>
 <h3>Subclasses</h3>
 <ul class="hlist">
@@ -743,12 +744,7 @@ Same as Random but the with isPersistent=True.</p>
 <span>class <span class="ident">Sampler</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Constructor for a Sampler class.</p>
-<h2 id="attributes">Attributes</h2>
-<dl>
-<dt><strong><code>isPersistent</code></strong> :&ensp;<code>boolean</code></dt>
-<dd>Indicating whether the sampler is persistent</dd>
-</dl></div>
+<div class="desc"><p>Constructor for a Sampler class.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -757,14 +753,7 @@ Same as Random but the with isPersistent=True.</p>
     def __init__(self):
         &#34;&#34;&#34;
         Constructor for a Sampler class.
-
-        Attributes
-        -----------
-        isPersistent: boolean
-            Indicating whether the sampler is persistent
         &#34;&#34;&#34;
-
-        self.isPersistent = None
 
     def pick(self, n):
         &#34;&#34;&#34;
@@ -784,7 +773,7 @@ Same as Random but the with isPersistent=True.</p>
 <h3>Subclasses</h3>
 <ul class="hlist">
 <li><a title="PDESolver.Sampling.Equidistant" href="#PDESolver.Sampling.Equidistant">Equidistant</a></li>
-<li><a title="PDESolver.Sampling.FirstRandom" href="#PDESolver.Sampling.FirstRandom">FirstRandom</a></li>
+<li><a title="PDESolver.Sampling.EquidistantRandom" href="#PDESolver.Sampling.EquidistantRandom">EquidistantRandom</a></li>
 <li><a title="PDESolver.Sampling.Random" href="#PDESolver.Sampling.Random">Random</a></li>
 </ul>
 <h3>Methods</h3>
@@ -853,7 +842,12 @@ Same as Random but the with isPersistent=True.</p>
         &#34;&#34;&#34;
 
         super().__init__()
-        self.regions = regions
+
+        samples = [r.pick(1, Random()) for r in regions]
+        dimensions = [s.shape[1] for s in samples]
+        assert len(set(dimensions)) == 1, &#34;All regions must have the same (shape-)dimension&#34; 
+
+        self.regions = list(regions)
 
     def pick(self, n, sampler):
         num_regions = len(self.regions)
@@ -908,9 +902,9 @@ Same as Random but the with isPersistent=True.</p>
 </ul>
 </li>
 <li>
-<h4><code><a title="PDESolver.Sampling.FirstRandom" href="#PDESolver.Sampling.FirstRandom">FirstRandom</a></code></h4>
+<h4><code><a title="PDESolver.Sampling.EquidistantRandom" href="#PDESolver.Sampling.EquidistantRandom">EquidistantRandom</a></code></h4>
 <ul class="">
-<li><code><a title="PDESolver.Sampling.FirstRandom.pick" href="#PDESolver.Sampling.FirstRandom.pick">pick</a></code></li>
+<li><code><a title="PDESolver.Sampling.EquidistantRandom.pick" href="#PDESolver.Sampling.EquidistantRandom.pick">pick</a></code></li>
 </ul>
 </li>
 <li>

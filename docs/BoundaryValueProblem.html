@@ -28,18 +28,42 @@
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">from PDESolver.Sampling import *
+import tensorflow as tf
 
 
-class classproperty(object):
-    def __init__(self, fget):
-        self.fget = fget
+class Specification:
+    def __init__(self, components, variables, differentials):
+        &#34;&#34;&#34;
+        Class for defining the specification of a boundary value problem.
 
-    def __get__(self, owner_self, owner_cls):
-        return self.fget(owner_cls)
+        Parameters
+        -----------
+        components: list
+            List of components of the boundary value problem
+        variables: list
+            List of variables of the boundary value problem
+        differentials: list
+            List of differentials of the boundary value problem
+        &#34;&#34;&#34;
+
+        self.components = components
+        self.variables = variables
+        self.differentials = differentials
+
+    def as_dictionary(self):
+        &#34;&#34;&#34;
+        Returns the specification as a dictionary.
+
+        Returns
+        -----------
+        dict: Specification of form {&#34;components&#34;: [str], &#34;variables&#34;: [str], &#34;differentials&#34;: [str]}
+        &#34;&#34;&#34;
+
+        return {&#34;components&#34;: self.components, &#34;variables&#34;: self.variables, &#34;differentials&#34;: self.differentials}
 
 
 class Condition:
-    def __init__(self, name, residue_fn, region_samples_pair, sampler=Random(), weight=1):
+    def __init__(self, name, residue_fn, region_samples_pair, sampler=Random()):
         &#34;&#34;&#34;
         Class for defining conditions for boundary value problems.
 
@@ -53,19 +77,17 @@ class Condition:
             Tuple of (region, number of samples)
         sampler: Sampler
             Sampler to use for sampling points in the region
-        weight: float
-            Weight of the condition
         &#34;&#34;&#34;
 
         self.name = name
         self.residue_fn = residue_fn
-        self.sample_points = lambda: region_samples_pair[0].pick(region_samples_pair[1], sampler)
+        self.sample_points = lambda: region_samples_pair[0].pick(
+            region_samples_pair[1], sampler)
         self._region = region_samples_pair[0]
-        self.weight = weight
-
-    def __call__(self, model, bvp):
-        Du = bvp.calculate_differentials(model, self.sample_points())
-        return self.residue_fn(Du)
+        
+        big_sample = region_samples_pair[0].pick(int(1e5), sampler)
+        self._mean = tf.math.reduce_mean(big_sample, 0)
+        self._variance = tf.math.reduce_variance(big_sample, 0)
 
     def get_region_bounds(self):
         &#34;&#34;&#34;
@@ -78,14 +100,31 @@ class Condition:
 
         return self._region.get_bounds()
 
+    def get_normalization_constants(self):
+        &#34;&#34;&#34;
+        Returns the normalization constants of the region.
+
+        Returns
+        -----------
+        tuple: Tuple of (mean, variance)
+        &#34;&#34;&#34;
+
+        return self._mean, self._variance
+
 
 class BoundaryValueProblem:
     &#34;&#34;&#34;
     Class for defining boundary value problems.
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a BoundaryValueProblem.
+        &#34;&#34;&#34;
+
+        ...
+
+    def get_conditions(self):
         &#34;&#34;&#34;
         Returns the conditions of the boundary value problem.
 
@@ -96,32 +135,17 @@ class BoundaryValueProblem:
 
         return []
 
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
+    def get_specification(self):
         &#34;&#34;&#34;
-        Calculates the differentials of the model at the given points.
-
-        Parameters
-        -----------
-        model: neural network
-            Model to calculate the differentials of
-        freeVariables: tensor
-            Tensor of points to calculate the differentials at
+        Returns the specification of the boundary value problem.
+        Right now, variables are only allowed to be single characters.
 
         Returns
         -----------
-        tensor: Tensor of differentials
+        dict: Specification of form {&#34;components&#34;: [str], &#34;variables&#34;: [str], &#34;differentials&#34;: [str]}
         &#34;&#34;&#34;
-        ...
 
-    @classmethod
-    def get_debug_string(cls):
-        debug = &#34;&#34;
-        for cond in cls.conditions:
-            samples = len(cond.sample_points())
-            debug += &#34;%s: %d\t&#34; % (cond.name, samples)
-
-        return debug[:-1]
+        return {}
 
 
 class Laplace(BoundaryValueProblem):
@@ -131,18 +155,27 @@ class Laplace(BoundaryValueProblem):
     (x, y) ⟼ z
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a Laplace equation.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.zero_boundary = Union(Cuboid([0, 0], [0, 1]), Cuboid([0, 0], [1, 0]), Cuboid([1, 0], [1, 1]))
+        self.f_boundary = Cuboid([0, 1], [1, 1])
+        self.inner = Cuboid([0, 0], [1, 1])
+
+    def get_conditions(self):
         return [
             Condition(&#34;zero_boundary&#34;,
                       lambda Du: Du[&#34;u&#34;],
-                      (Union(Cuboid([0, 0], [0, 1]), Cuboid([0, 0], [1, 0]), Cuboid([1, 0], [1, 1])), 180)),
+                      (self.zero_boundary, 180)),
             Condition(&#34;f_boundary&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.where(tf.abs(Du[&#34;x&#34;] - 0.5) &lt; 0.25, 1., 0.), #2 * Du[&#34;x&#34;] * (1 - Du[&#34;x&#34;]),
-                      (Cuboid([0, 1], [1, 1]), 400), weight=2),
+                      (self.f_boundary, 400)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_xx&#34;] + Du[&#34;u_yy&#34;],
-                      (Cuboid([0, 0], [1, 1]), 1600))
+                      (self.inner, 1600))
         ]
 
     @staticmethod
@@ -173,18 +206,28 @@ class WaveEquation1D(BoundaryValueProblem):
     (t, x) ⟼ y
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a 1D wave equation.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.initial = Cuboid([0, -1], [0, 1])
+        self.boundary1 = Cuboid([0, -1], [0, 1])
+        self.inner = Cuboid([0, -1], [1, 1])
+
+    
+    def get_conditions(self):
         return [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - 1 / (200*(Du[&#34;x&#34;] + 0.5)**2 + 1) - 1 / (200*(Du[&#34;x&#34;] - 0.5)**2 + 2),
-                      (Cuboid([0, -1], [0, 1]), 100), weight=2),
+                      (self.initial, 128)),
             Condition(&#34;boundary1&#34;,
                       lambda Du: Du[&#34;u_t&#34;],
-                      (Cuboid([0, -1], [0, 1]), 100), weight=2),
+                      (self.boundary1, 128)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_tt&#34;] - Du[&#34;u_xx&#34;],
-                      (Cuboid([0, -1], [1, 1]), 900))
+                      (self.inner, 128))
         ]
 
     @staticmethod
@@ -215,15 +258,23 @@ class WaveEquation2D(BoundaryValueProblem):
     (t, x, y) ⟼ z
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a 2D wave equation.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.initial_u = Cuboid([0, -2, -2], [0, 2, 2])
+        self.inner = Cuboid([0, -2, -2], [2, 2, 2])
+
+    def get_conditions(self):
         return [
             Condition(&#34;initial_u&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.exp(-Du[&#34;x&#34;] ** 2 - Du[&#34;y&#34;] ** 2) ** 4,
-                      (Cuboid([0, -2, -2], [0, 2, 2]), 400)),
+                      (self.initial_u, 400)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_tt&#34;] - Du[&#34;u_xx&#34;] - Du[&#34;u_yy&#34;],
-                      (Cuboid([0, -2, -2], [2, 2, 2]), 4900))
+                      (self.inner, 4900))
         ]
 
     @staticmethod
@@ -255,21 +306,30 @@ class HeatEquation1D(BoundaryValueProblem):
     &#34;&#34;&#34;
     Class defining the 1D heat equation as a boundary value problem.
 
-    (t, x) ⟼ (y, control)
+    (t, x) ⟼ y
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a 1D heat equation.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.initial = Cuboid([0, 0], [0, 1])
+        self.boundary = Union(Cuboid([0, 0], [1, 0]), Cuboid([0, 1], [1, 1]))
+        self.inner = Cuboid([0, 0], [1, 1])
+
+    def get_conditions(self):
         return [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - 8*Du[&#34;x&#34;]**2 * (1 - Du[&#34;x&#34;])**2,
-                      (Cuboid([0, 0], [0, 1]), 100)),
+                      (self.initial, 100)),
             Condition(&#34;boundary&#34;,
                       lambda Du: Du[&#34;u_x&#34;],
-                      (Union(Cuboid([0, 0], [1, 0]), Cuboid([0, 1], [1, 1])), 100)),
+                      (self.boundary, 100)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] - 0.125 * Du[&#34;u_xx&#34;],
-                      (Cuboid([0, 0], [1, 1]), 1600),
+                      (self.inner, 1600),
                       Equidistant())
         ]
 
@@ -301,15 +361,23 @@ class HeatEquation2D(BoundaryValueProblem):
     (t, x, y) ⟼ z
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a 2D heat equation.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.initial = Cuboid([0, -2, -2], [0, 2, 2])
+        self.inner = Cuboid([0, -2, -2], [2, 2, 2])
+
+    def get_conditions(self):
         return [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.exp(-Du[&#34;x&#34;] ** 2 - Du[&#34;y&#34;] ** 2) ** 2,
-                      (Cuboid([0, -2, -2], [0, 2, 2]), 400)),
+                      (self.initial, 400)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] - Du[&#34;u_xx&#34;] - Du[&#34;u_yy&#34;],
-                      (Cuboid([0, -2, -2], [2, 2, 2]), 3600))
+                      (self.inner, 3600))
         ]
 
     @staticmethod
@@ -342,18 +410,27 @@ class BurgersEquation(BoundaryValueProblem):
     (t, x) ⟼ y
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a Burgers equation.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.initial = Cuboid([0, -1], [0, 1])
+        self.boundary = Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1]))
+        self.inner = Cuboid([0, -1], [1, 1])
+
+    def get_conditions(self):
         return [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] + tf.sin(np.pi * Du[&#34;x&#34;]),
-                      (Cuboid([0, -1], [0, 1]), 200)),
+                      (self.initial, 200)),
             Condition(&#34;boundary&#34;,
                       lambda Du: Du[&#34;u&#34;],
-                      (Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1])), 200)),
+                      (self.boundary, 200)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] + Du[&#34;u&#34;] * Du[&#34;u_x&#34;] - 0.01 / np.pi * Du[&#34;u_xx&#34;],
-                      (Cuboid([0, -1], [1, 1]), 1600))
+                      (self.inner, 1600))
         ]
 
     @staticmethod
@@ -383,21 +460,31 @@ class VanDerPolEquation(BoundaryValueProblem):
     (t, x) ⟼ y
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a Van-der-Pol equation.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.initial = Cuboid([0, 0], [4, 0])
+        self.boundary = Cuboid([0, 0], [4, 0])
+        self.helper = Cuboid([0, 0], [0, 10])
+        self.inner = Cuboid([0, 0], [4, 10])
+
+    def conditions(self):
         return [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - 1,
-                      (Cuboid([0, 0], [4, 0]), 200)),
+                      (self.initial, 200)),
             Condition(&#34;boundary&#34;,
                       lambda Du: Du[&#34;u_x&#34;],
-                      (Cuboid([0, 0], [4, 0]), 200)),
+                      (self.boundary, 200)),
             Condition(&#34;helper&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.cos(Du[&#34;x&#34;]),
-                      (Cuboid([0, 0], [0, 10]), 200)),
+                      (self.helper, 200)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_xx&#34;] - Du[&#34;t&#34;] * (1 - Du[&#34;u&#34;] ** 2) * Du[&#34;u_x&#34;] + Du[&#34;u&#34;],
-                      (Cuboid([0, 0], [4, 10]), 3000))
+                      (self.inner, 3000))
         ]
 
     @staticmethod
@@ -426,26 +513,34 @@ class AllenCahnEquation(BoundaryValueProblem):
     (t, x) ⟼ y
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a Allen-Cahn equation.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.initial = Cuboid([0, -1], [0, 1])
+        self.boundary = Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1]))
+        self.center = Cuboid([0, 0], [1, 0])
+        self.inner = Cuboid([0, -1], [1, 1])
+
+    def get_conditions(self):
         return [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - Du[&#34;x&#34;] ** 2 * tf.cos(np.pi * Du[&#34;x&#34;]),
-                      (Cuboid([0, -1], [0, 1]), 100),
-                      weight=50),
+                      (self.initial, 100)),
             Condition(&#34;boundary1&#34;,
                       lambda Du: Du[&#34;u&#34;] + 1,
-                      (Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1])), 200)),
+                      (self.boundary, 200)),
             Condition(&#34;boundary2&#34;,
                       lambda Du: Du[&#34;u_x&#34;],
-                      (Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1])), 200)),
+                      (self.boundary, 200)),
             Condition(&#34;center&#34;,
                       lambda Du: Du[&#34;u&#34;],
-                      (Cuboid([0, 0], [1, 0]), 100),
-                      weight=10),
+                      (self.center, 100)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] - 0.0001 * Du[&#34;u_xx&#34;] + 5 * (Du[&#34;u&#34;] ** 3 - Du[&#34;u&#34;]),
-                      (Cuboid([0, -1], [1, 1]), 2500))
+                      (self.inner, 2500))
         ]
 
     @staticmethod
@@ -473,17 +568,25 @@ class KortewegDeVriesEquation(BoundaryValueProblem):
         Class defining the KortewegDeVriesEquation equation.
 
         (t, x) ⟼ y
+    &#34;&#34;&#34;
+
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a KortewegDeVriesEquation equation.
         &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+        super().__init__()
+        self.initial = Cuboid([0, -1], [0, 1])
+        self.inner = Cuboid([0, -1], [1, 1])
+
+    def get_conditions(self):
         return [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.cos(np.pi * Du[&#34;x&#34;]),
-                      (Cuboid([0, -1], [0, 1]), 500)),
+                      (self.initial, 500)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] + 6 * Du[&#34;u&#34;] * Du[&#34;u_x&#34;] + Du[&#34;u_xxx&#34;],
-                      (Cuboid([0, -1], [1, 1]), 2000))
+                      (self.inner, 2000))
         ]
 
     @staticmethod
@@ -515,15 +618,23 @@ class ConvectionDiffusionEquation(BoundaryValueProblem):
     (t, x) ⟼ y
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a Convection-Diffusion equation.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.initital = Cuboid([0, -0.5], [0, 1])
+        self.inner = Cuboid([0, -0.5], [1, 1])
+
+    def get_conditions(self):
         return [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.exp(-25 * Du[&#34;x&#34;]**2),
-                      (Cuboid([0, -0.5], [0, 1]), 100)),
+                      (self.initital, 100)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] + Du[&#34;u_x&#34;] - 0.1 * Du[&#34;u_xx&#34;],
-                      (Cuboid([0, -0.5], [1, 1]), 1000))
+                      (self.inner, 1000))
         ]
 
     @staticmethod
@@ -553,19 +664,28 @@ class MinimalSurfaceEquation(BoundaryValueProblem):
     (x, y) ⟼ z
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a minimal surface equation.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.boundary1 = Cuboid([0, -1], [0, 1])
+        self.boundary2 = Cuboid([1, -1], [1, 1])
+        self.inner = Cuboid([0, -1], [1, 1])
+
+    def get_conditions(self):
         return [
             Condition(&#34;boundary1&#34;,
                       lambda Du: Du[&#34;u&#34;] - Du[&#34;x&#34;],
-                      (Cuboid([0, -1], [0, 1]), 50)),
+                      (self.boundary1, 50)),
             Condition(&#34;boundary2&#34;,
                       lambda Du: Du[&#34;u&#34;] + Du[&#34;x&#34;],
-                      (Cuboid([1, -1], [1, 1]), 50)),
+                      (self.boundary2, 50)),
             Condition(&#34;inner&#34;,
                       lambda Du: (1 + Du[&#34;u_x&#34;] ** 2) * Du[&#34;u_yy&#34;] - 2 * Du[&#34;u_y&#34;] * Du[&#34;u_x&#34;] * Du[&#34;u_xy&#34;] + (
                               1 + Du[&#34;u_y&#34;] ** 2) * Du[&#34;u_xx&#34;],
-                      (Cuboid([0, -1], [1, 1]), 500))
+                      (self.inner, 500))
         ]
 
     @staticmethod
@@ -598,10 +718,23 @@ class Pendulum(BoundaryValueProblem):
     t ⟼ (x_1, x_2, lambda)
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a pendulum.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.initialPos = Cuboid([0], [0])
+        self.initialVel = Cuboid([0], [0])
+        self.inner = Cuboid([0], [10])
+        self.constraint = Cuboid([0], [10])
+
+    def get_conditions(self):
         def initPos(t):
             return tf.concat([0 * t + 1, 0 * t], axis=1)
+        
+        def initVel(t):
+            return tf.concat([0 * t + 0, 0 * t + 0], axis=1)
 
         def ode(u, t, alpha):
             return -alpha * u - tf.concat([0 * t, 0 * t + 1.5], axis=1)
@@ -609,16 +742,16 @@ class Pendulum(BoundaryValueProblem):
         return [
             Condition(&#34;initialPos&#34;,
                       lambda Du: Du[&#34;u&#34;] - initPos(Du[&#34;t&#34;]),
-                      (Cuboid([0], [0]), 10)),
+                      (self.initialPos, 128)),
             Condition(&#34;initialVel&#34;,
-                      lambda Du: Du[&#34;u_t&#34;],
-                      (Cuboid([0], [0]), 10)),
-            Condition(&#34;ode&#34;,
+                      lambda Du: Du[&#34;u_t&#34;] - initVel(Du[&#34;t&#34;]),
+                      (self.initialVel, 128)),
+            Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_tt&#34;] - ode(Du[&#34;u&#34;], Du[&#34;t&#34;], Du[&#34;alpha&#34;]),
-                      (Cuboid([0], [10]), 500)),
+                      (self.inner, 128)),
             Condition(&#34;constraint&#34;,
                       lambda Du: tf.norm(Du[&#34;u&#34;], axis=1)**2 - 1.,
-                      (Cuboid([0], [10]), 500))
+                      (self.constraint, 128))
         ]
 
     @staticmethod
@@ -671,7 +804,8 @@ class Pendulum(BoundaryValueProblem):
 </code></dt>
 <dd>
 <div class="desc"><p>Class defining the Allen-Cahn equation as a boundary value problem.</p>
-<p>(t, x) ⟼ y</p></div>
+<p>(t, x) ⟼ y</p>
+<p>Constructor for a Allen-Cahn equation.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -683,26 +817,34 @@ class Pendulum(BoundaryValueProblem):
     (t, x) ⟼ y
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a Allen-Cahn equation.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.initial = Cuboid([0, -1], [0, 1])
+        self.boundary = Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1]))
+        self.center = Cuboid([0, 0], [1, 0])
+        self.inner = Cuboid([0, -1], [1, 1])
+
+    def get_conditions(self):
         return [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - Du[&#34;x&#34;] ** 2 * tf.cos(np.pi * Du[&#34;x&#34;]),
-                      (Cuboid([0, -1], [0, 1]), 100),
-                      weight=50),
+                      (self.initial, 100)),
             Condition(&#34;boundary1&#34;,
                       lambda Du: Du[&#34;u&#34;] + 1,
-                      (Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1])), 200)),
+                      (self.boundary, 200)),
             Condition(&#34;boundary2&#34;,
                       lambda Du: Du[&#34;u_x&#34;],
-                      (Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1])), 200)),
+                      (self.boundary, 200)),
             Condition(&#34;center&#34;,
                       lambda Du: Du[&#34;u&#34;],
-                      (Cuboid([0, 0], [1, 0]), 100),
-                      weight=10),
+                      (self.center, 100)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] - 0.0001 * Du[&#34;u_xx&#34;] + 5 * (Du[&#34;u&#34;] ** 3 - Du[&#34;u&#34;]),
-                      (Cuboid([0, -1], [1, 1]), 2500))
+                      (self.inner, 2500))
         ]
 
     @staticmethod
@@ -728,18 +870,44 @@ class Pendulum(BoundaryValueProblem):
 <ul class="hlist">
 <li><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></li>
 </ul>
-<h3>Class variables</h3>
+<h3>Static methods</h3>
 <dl>
-<dt id="PDESolver.BoundaryValueProblem.AllenCahnEquation.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
+<dt id="PDESolver.BoundaryValueProblem.AllenCahnEquation.calculate_differentials"><code class="name flex">
+<span>def <span class="ident">calculate_differentials</span></span>(<span>model, freeVariables)</span>
+</code></dt>
 <dd>
 <div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@staticmethod
+def calculate_differentials(model, freeVariables):
+    with tf.GradientTape(persistent=True) as tape:
+        t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
+
+        tape.watch(t)
+        tape.watch(x)
+
+        u = model(tf.stack([t[:, 0], x[:, 0]], axis=1))
+
+        u_t = tape.gradient(u, t)
+        u_x = tape.gradient(u, x)
+
+        u_xx = tape.gradient(u_x, x)
+
+    del tape
+
+    return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_xx&#34;: u_xx}</code></pre>
+</details>
 </dd>
 </dl>
 <h3>Inherited members</h3>
 <ul class="hlist">
 <li><code><b><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></b></code>:
 <ul class="hlist">
-<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials">calculate_differentials</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions">get_conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification">get_specification</a></code></li>
 </ul>
 </li>
 </ul>
@@ -748,7 +916,8 @@ class Pendulum(BoundaryValueProblem):
 <span>class <span class="ident">BoundaryValueProblem</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class for defining boundary value problems.</p></div>
+<div class="desc"><p>Class for defining boundary value problems.</p>
+<p>Constructor for a BoundaryValueProblem.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -758,8 +927,14 @@ class Pendulum(BoundaryValueProblem):
     Class for defining boundary value problems.
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a BoundaryValueProblem.
+        &#34;&#34;&#34;
+
+        ...
+
+    def get_conditions(self):
         &#34;&#34;&#34;
         Returns the conditions of the boundary value problem.
 
@@ -770,32 +945,17 @@ class Pendulum(BoundaryValueProblem):
 
         return []
 
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
+    def get_specification(self):
         &#34;&#34;&#34;
-        Calculates the differentials of the model at the given points.
-
-        Parameters
-        -----------
-        model: neural network
-            Model to calculate the differentials of
-        freeVariables: tensor
-            Tensor of points to calculate the differentials at
+        Returns the specification of the boundary value problem.
+        Right now, variables are only allowed to be single characters.
 
         Returns
         -----------
-        tensor: Tensor of differentials
+        dict: Specification of form {&#34;components&#34;: [str], &#34;variables&#34;: [str], &#34;differentials&#34;: [str]}
         &#34;&#34;&#34;
-        ...
 
-    @classmethod
-    def get_debug_string(cls):
-        debug = &#34;&#34;
-        for cond in cls.conditions:
-            samples = len(cond.sample_points())
-            debug += &#34;%s: %d\t&#34; % (cond.name, samples)
-
-        return debug[:-1]</code></pre>
+        return {}</code></pre>
 </details>
 <h3>Subclasses</h3>
 <ul class="hlist">
@@ -812,72 +972,60 @@ class Pendulum(BoundaryValueProblem):
 <li><a title="PDESolver.BoundaryValueProblem.WaveEquation1D" href="#PDESolver.BoundaryValueProblem.WaveEquation1D">WaveEquation1D</a></li>
 <li><a title="PDESolver.BoundaryValueProblem.WaveEquation2D" href="#PDESolver.BoundaryValueProblem.WaveEquation2D">WaveEquation2D</a></li>
 </ul>
-<h3>Class variables</h3>
+<h3>Methods</h3>
 <dl>
-<dt id="PDESolver.BoundaryValueProblem.BoundaryValueProblem.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-</dl>
-<h3>Static methods</h3>
-<dl>
-<dt id="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials"><code class="name flex">
-<span>def <span class="ident">calculate_differentials</span></span>(<span>model, freeVariables)</span>
+<dt id="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions"><code class="name flex">
+<span>def <span class="ident">get_conditions</span></span>(<span>self)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Calculates the differentials of the model at the given points.</p>
-<h2 id="parameters">Parameters</h2>
-<dl>
-<dt><strong><code>model</code></strong> :&ensp;<code>neural network</code></dt>
-<dd>Model to calculate the differentials of</dd>
-<dt><strong><code>freeVariables</code></strong> :&ensp;<code>tensor</code></dt>
-<dd>Tensor of points to calculate the differentials at</dd>
-</dl>
+<div class="desc"><p>Returns the conditions of the boundary value problem.</p>
 <h2 id="returns">Returns</h2>
 <dl>
-<dt><strong><code>tensor</code></strong> :&ensp;<code>Tensor</code> of <code>differentials</code></dt>
+<dt><strong><code>list</code></strong> :&ensp;<code>List</code> of <code>conditions</code></dt>
 <dd>&nbsp;</dd>
 </dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">@staticmethod
-def calculate_differentials(model, freeVariables):
+<pre><code class="python">def get_conditions(self):
     &#34;&#34;&#34;
-    Calculates the differentials of the model at the given points.
-
-    Parameters
-    -----------
-    model: neural network
-        Model to calculate the differentials of
-    freeVariables: tensor
-        Tensor of points to calculate the differentials at
+    Returns the conditions of the boundary value problem.
 
     Returns
     -----------
-    tensor: Tensor of differentials
+    list: List of conditions
     &#34;&#34;&#34;
-    ...</code></pre>
+
+    return []</code></pre>
 </details>
 </dd>
-<dt id="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_debug_string"><code class="name flex">
-<span>def <span class="ident">get_debug_string</span></span>(<span>)</span>
+<dt id="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification"><code class="name flex">
+<span>def <span class="ident">get_specification</span></span>(<span>self)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Returns the specification of the boundary value problem.
+Right now, variables are only allowed to be single characters.</p>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>dict</code></strong> :&ensp;<code><a title="PDESolver.BoundaryValueProblem.Specification" href="#PDESolver.BoundaryValueProblem.Specification">Specification</a></code> of <code>form {"components": [str], "variables": [str], "differentials": [str]}</code></dt>
+<dd>&nbsp;</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">@classmethod
-def get_debug_string(cls):
-    debug = &#34;&#34;
-    for cond in cls.conditions:
-        samples = len(cond.sample_points())
-        debug += &#34;%s: %d\t&#34; % (cond.name, samples)
+<pre><code class="python">def get_specification(self):
+    &#34;&#34;&#34;
+    Returns the specification of the boundary value problem.
+    Right now, variables are only allowed to be single characters.
 
-    return debug[:-1]</code></pre>
+    Returns
+    -----------
+    dict: Specification of form {&#34;components&#34;: [str], &#34;variables&#34;: [str], &#34;differentials&#34;: [str]}
+    &#34;&#34;&#34;
+
+    return {}</code></pre>
 </details>
 </dd>
 </dl>
@@ -887,7 +1035,8 @@ def get_debug_string(cls):
 </code></dt>
 <dd>
 <div class="desc"><p>Class defining the Burgers equation as a boundary value problem.</p>
-<p>(t, x) ⟼ y</p></div>
+<p>(t, x) ⟼ y</p>
+<p>Constructor for a Burgers equation.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -899,18 +1048,27 @@ def get_debug_string(cls):
     (t, x) ⟼ y
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a Burgers equation.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.initial = Cuboid([0, -1], [0, 1])
+        self.boundary = Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1]))
+        self.inner = Cuboid([0, -1], [1, 1])
+
+    def get_conditions(self):
         return [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] + tf.sin(np.pi * Du[&#34;x&#34;]),
-                      (Cuboid([0, -1], [0, 1]), 200)),
+                      (self.initial, 200)),
             Condition(&#34;boundary&#34;,
                       lambda Du: Du[&#34;u&#34;],
-                      (Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1])), 200)),
+                      (self.boundary, 200)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] + Du[&#34;u&#34;] * Du[&#34;u_x&#34;] - 0.01 / np.pi * Du[&#34;u_xx&#34;],
-                      (Cuboid([0, -1], [1, 1]), 1600))
+                      (self.inner, 1600))
         ]
 
     @staticmethod
@@ -936,25 +1094,51 @@ def get_debug_string(cls):
 <ul class="hlist">
 <li><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></li>
 </ul>
-<h3>Class variables</h3>
+<h3>Static methods</h3>
 <dl>
-<dt id="PDESolver.BoundaryValueProblem.BurgersEquation.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
+<dt id="PDESolver.BoundaryValueProblem.BurgersEquation.calculate_differentials"><code class="name flex">
+<span>def <span class="ident">calculate_differentials</span></span>(<span>model, freeVariables)</span>
+</code></dt>
 <dd>
 <div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@staticmethod
+def calculate_differentials(model, freeVariables):
+    with tf.GradientTape(persistent=True) as tape:
+        t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
+
+        tape.watch(t)
+        tape.watch(x)
+
+        u = model(tf.stack([t[:, 0], x[:, 0]], axis=1))
+
+        u_t = tape.gradient(u, t)
+        u_x = tape.gradient(u, x)
+
+        u_xx = tape.gradient(u_x, x)
+
+    del tape
+
+    return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_xx&#34;: u_xx}</code></pre>
+</details>
 </dd>
 </dl>
 <h3>Inherited members</h3>
 <ul class="hlist">
 <li><code><b><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></b></code>:
 <ul class="hlist">
-<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials">calculate_differentials</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions">get_conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification">get_specification</a></code></li>
 </ul>
 </li>
 </ul>
 </dd>
 <dt id="PDESolver.BoundaryValueProblem.Condition"><code class="flex name class">
 <span>class <span class="ident">Condition</span></span>
-<span>(</span><span>name, residue_fn, region_samples_pair, sampler=&lt;PDESolver.Sampling.Random object&gt;, weight=1)</span>
+<span>(</span><span>name, residue_fn, region_samples_pair, sampler=&lt;PDESolver.Sampling.Random object&gt;)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Class for defining conditions for boundary value problems.</p>
@@ -968,15 +1152,13 @@ def get_debug_string(cls):
 <dd>Tuple of (region, number of samples)</dd>
 <dt><strong><code>sampler</code></strong> :&ensp;<code>Sampler</code></dt>
 <dd>Sampler to use for sampling points in the region</dd>
-<dt><strong><code>weight</code></strong> :&ensp;<code>float</code></dt>
-<dd>Weight of the condition</dd>
 </dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class Condition:
-    def __init__(self, name, residue_fn, region_samples_pair, sampler=Random(), weight=1):
+    def __init__(self, name, residue_fn, region_samples_pair, sampler=Random()):
         &#34;&#34;&#34;
         Class for defining conditions for boundary value problems.
 
@@ -990,19 +1172,17 @@ def get_debug_string(cls):
             Tuple of (region, number of samples)
         sampler: Sampler
             Sampler to use for sampling points in the region
-        weight: float
-            Weight of the condition
         &#34;&#34;&#34;
 
         self.name = name
         self.residue_fn = residue_fn
-        self.sample_points = lambda: region_samples_pair[0].pick(region_samples_pair[1], sampler)
+        self.sample_points = lambda: region_samples_pair[0].pick(
+            region_samples_pair[1], sampler)
         self._region = region_samples_pair[0]
-        self.weight = weight
-
-    def __call__(self, model, bvp):
-        Du = bvp.calculate_differentials(model, self.sample_points())
-        return self.residue_fn(Du)
+        
+        big_sample = region_samples_pair[0].pick(int(1e5), sampler)
+        self._mean = tf.math.reduce_mean(big_sample, 0)
+        self._variance = tf.math.reduce_variance(big_sample, 0)
 
     def get_region_bounds(self):
         &#34;&#34;&#34;
@@ -1013,10 +1193,47 @@ def get_debug_string(cls):
         tuple: Tuple of (lower bound, upper bound)
         &#34;&#34;&#34;
 
-        return self._region.get_bounds()</code></pre>
+        return self._region.get_bounds()
+
+    def get_normalization_constants(self):
+        &#34;&#34;&#34;
+        Returns the normalization constants of the region.
+
+        Returns
+        -----------
+        tuple: Tuple of (mean, variance)
+        &#34;&#34;&#34;
+
+        return self._mean, self._variance</code></pre>
 </details>
 <h3>Methods</h3>
 <dl>
+<dt id="PDESolver.BoundaryValueProblem.Condition.get_normalization_constants"><code class="name flex">
+<span>def <span class="ident">get_normalization_constants</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Returns the normalization constants of the region.</p>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>tuple</code></strong> :&ensp;<code>Tuple</code> of <code>(mean, variance)</code></dt>
+<dd>&nbsp;</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def get_normalization_constants(self):
+    &#34;&#34;&#34;
+    Returns the normalization constants of the region.
+
+    Returns
+    -----------
+    tuple: Tuple of (mean, variance)
+    &#34;&#34;&#34;
+
+    return self._mean, self._variance</code></pre>
+</details>
+</dd>
 <dt id="PDESolver.BoundaryValueProblem.Condition.get_region_bounds"><code class="name flex">
 <span>def <span class="ident">get_region_bounds</span></span>(<span>self)</span>
 </code></dt>
@@ -1050,7 +1267,8 @@ def get_debug_string(cls):
 </code></dt>
 <dd>
 <div class="desc"><p>Class defining the Convection-Diffusion equation as a boundary value problem.</p>
-<p>(t, x) ⟼ y</p></div>
+<p>(t, x) ⟼ y</p>
+<p>Constructor for a Convection-Diffusion equation.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -1062,15 +1280,23 @@ def get_debug_string(cls):
     (t, x) ⟼ y
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a Convection-Diffusion equation.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.initital = Cuboid([0, -0.5], [0, 1])
+        self.inner = Cuboid([0, -0.5], [1, 1])
+
+    def get_conditions(self):
         return [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.exp(-25 * Du[&#34;x&#34;]**2),
-                      (Cuboid([0, -0.5], [0, 1]), 100)),
+                      (self.initital, 100)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] + Du[&#34;u_x&#34;] - 0.1 * Du[&#34;u_xx&#34;],
-                      (Cuboid([0, -0.5], [1, 1]), 1000))
+                      (self.inner, 1000))
         ]
 
     @staticmethod
@@ -1096,18 +1322,44 @@ def get_debug_string(cls):
 <ul class="hlist">
 <li><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></li>
 </ul>
-<h3>Class variables</h3>
+<h3>Static methods</h3>
 <dl>
-<dt id="PDESolver.BoundaryValueProblem.ConvectionDiffusionEquation.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
+<dt id="PDESolver.BoundaryValueProblem.ConvectionDiffusionEquation.calculate_differentials"><code class="name flex">
+<span>def <span class="ident">calculate_differentials</span></span>(<span>model, freeVariables)</span>
+</code></dt>
 <dd>
 <div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@staticmethod
+def calculate_differentials(model, freeVariables):
+    with tf.GradientTape(persistent=True) as tape:
+        t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
+
+        tape.watch(t)
+        tape.watch(x)
+
+        u = model(tf.stack([t[:, 0], x[:, 0]], axis=1))
+
+        u_t = tape.gradient(u, t)
+        u_x = tape.gradient(u, x)
+
+        u_xx = tape.gradient(u_x, x)
+
+    del tape
+
+    return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_xx&#34;: u_xx}</code></pre>
+</details>
 </dd>
 </dl>
 <h3>Inherited members</h3>
 <ul class="hlist">
 <li><code><b><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></b></code>:
 <ul class="hlist">
-<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials">calculate_differentials</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions">get_conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification">get_specification</a></code></li>
 </ul>
 </li>
 </ul>
@@ -1117,7 +1369,8 @@ def get_debug_string(cls):
 </code></dt>
 <dd>
 <div class="desc"><p>Class defining the 1D heat equation as a boundary value problem.</p>
-<p>(t, x) ⟼ (y, control)</p></div>
+<p>(t, x) ⟼ y</p>
+<p>Constructor for a 1D heat equation.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -1126,21 +1379,30 @@ def get_debug_string(cls):
     &#34;&#34;&#34;
     Class defining the 1D heat equation as a boundary value problem.
 
-    (t, x) ⟼ (y, control)
+    (t, x) ⟼ y
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a 1D heat equation.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.initial = Cuboid([0, 0], [0, 1])
+        self.boundary = Union(Cuboid([0, 0], [1, 0]), Cuboid([0, 1], [1, 1]))
+        self.inner = Cuboid([0, 0], [1, 1])
+
+    def get_conditions(self):
         return [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - 8*Du[&#34;x&#34;]**2 * (1 - Du[&#34;x&#34;])**2,
-                      (Cuboid([0, 0], [0, 1]), 100)),
+                      (self.initial, 100)),
             Condition(&#34;boundary&#34;,
                       lambda Du: Du[&#34;u_x&#34;],
-                      (Union(Cuboid([0, 0], [1, 0]), Cuboid([0, 1], [1, 1])), 100)),
+                      (self.boundary, 100)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] - 0.125 * Du[&#34;u_xx&#34;],
-                      (Cuboid([0, 0], [1, 1]), 1600),
+                      (self.inner, 1600),
                       Equidistant())
         ]
 
@@ -1168,18 +1430,45 @@ def get_debug_string(cls):
 <ul class="hlist">
 <li><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></li>
 </ul>
-<h3>Class variables</h3>
+<h3>Static methods</h3>
 <dl>
-<dt id="PDESolver.BoundaryValueProblem.HeatEquation1D.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
+<dt id="PDESolver.BoundaryValueProblem.HeatEquation1D.calculate_differentials"><code class="name flex">
+<span>def <span class="ident">calculate_differentials</span></span>(<span>model, freeVariables)</span>
+</code></dt>
 <dd>
 <div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@staticmethod
+def calculate_differentials(model, freeVariables):
+    with tf.GradientTape(persistent=True) as tape:
+        t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
+
+        tape.watch(t)
+        tape.watch(x)
+
+        ipt = tf.stack([t[:, 0], x[:, 0]], axis=1)
+        u = model(ipt)
+
+        u_t = tape.gradient(u, t)
+        u_x = tape.gradient(u, x)
+
+        u_xx = tape.gradient(u_x, x)
+
+    del tape
+
+    return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_xx&#34;: u_xx}</code></pre>
+</details>
 </dd>
 </dl>
 <h3>Inherited members</h3>
 <ul class="hlist">
 <li><code><b><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></b></code>:
 <ul class="hlist">
-<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials">calculate_differentials</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions">get_conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification">get_specification</a></code></li>
 </ul>
 </li>
 </ul>
@@ -1189,7 +1478,8 @@ def get_debug_string(cls):
 </code></dt>
 <dd>
 <div class="desc"><p>Class defining the 2D heat equation as a boundary value problem.</p>
-<p>(t, x, y) ⟼ z</p></div>
+<p>(t, x, y) ⟼ z</p>
+<p>Constructor for a 2D heat equation.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -1201,15 +1491,23 @@ def get_debug_string(cls):
     (t, x, y) ⟼ z
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a 2D heat equation.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.initial = Cuboid([0, -2, -2], [0, 2, 2])
+        self.inner = Cuboid([0, -2, -2], [2, 2, 2])
+
+    def get_conditions(self):
         return [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.exp(-Du[&#34;x&#34;] ** 2 - Du[&#34;y&#34;] ** 2) ** 2,
-                      (Cuboid([0, -2, -2], [0, 2, 2]), 400)),
+                      (self.initial, 400)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] - Du[&#34;u_xx&#34;] - Du[&#34;u_yy&#34;],
-                      (Cuboid([0, -2, -2], [2, 2, 2]), 3600))
+                      (self.inner, 3600))
         ]
 
     @staticmethod
@@ -1238,18 +1536,47 @@ def get_debug_string(cls):
 <ul class="hlist">
 <li><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></li>
 </ul>
-<h3>Class variables</h3>
+<h3>Static methods</h3>
 <dl>
-<dt id="PDESolver.BoundaryValueProblem.HeatEquation2D.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
+<dt id="PDESolver.BoundaryValueProblem.HeatEquation2D.calculate_differentials"><code class="name flex">
+<span>def <span class="ident">calculate_differentials</span></span>(<span>model, freeVariables)</span>
+</code></dt>
 <dd>
 <div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@staticmethod
+def calculate_differentials(model, freeVariables):
+    with tf.GradientTape(persistent=True) as tape:
+        t, x, y = freeVariables[:, 0:1], freeVariables[:, 1:2], freeVariables[:, 2:3]
+
+        tape.watch(t)
+        tape.watch(x)
+        tape.watch(y)
+
+        u = model(tf.stack([t[:, 0], x[:, 0], y[:, 0]], axis=1))
+
+        u_t = tape.gradient(u, t)
+        u_x = tape.gradient(u, x)
+        u_y = tape.gradient(u, y)
+
+        u_xx = tape.gradient(u_x, x)
+        u_yy = tape.gradient(u_y, y)
+
+    del tape
+
+    return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;y&#34;: y, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_y&#34;: u_yy, &#34;u_xx&#34;: u_xx, &#34;u_yy&#34;: u_yy}</code></pre>
+</details>
 </dd>
 </dl>
 <h3>Inherited members</h3>
 <ul class="hlist">
 <li><code><b><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></b></code>:
 <ul class="hlist">
-<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials">calculate_differentials</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions">get_conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification">get_specification</a></code></li>
 </ul>
 </li>
 </ul>
@@ -1259,7 +1586,8 @@ def get_debug_string(cls):
 </code></dt>
 <dd>
 <div class="desc"><p>Class defining the KortewegDeVriesEquation equation.</p>
-<p>(t, x) ⟼ y</p></div>
+<p>(t, x) ⟼ y</p>
+<p>Constructor for a KortewegDeVriesEquation equation.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -1269,17 +1597,25 @@ def get_debug_string(cls):
         Class defining the KortewegDeVriesEquation equation.
 
         (t, x) ⟼ y
+    &#34;&#34;&#34;
+
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a KortewegDeVriesEquation equation.
         &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+        super().__init__()
+        self.initial = Cuboid([0, -1], [0, 1])
+        self.inner = Cuboid([0, -1], [1, 1])
+
+    def get_conditions(self):
         return [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.cos(np.pi * Du[&#34;x&#34;]),
-                      (Cuboid([0, -1], [0, 1]), 500)),
+                      (self.initial, 500)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] + 6 * Du[&#34;u&#34;] * Du[&#34;u_x&#34;] + Du[&#34;u_xxx&#34;],
-                      (Cuboid([0, -1], [1, 1]), 2000))
+                      (self.inner, 2000))
         ]
 
     @staticmethod
@@ -1307,18 +1643,46 @@ def get_debug_string(cls):
 <ul class="hlist">
 <li><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></li>
 </ul>
-<h3>Class variables</h3>
+<h3>Static methods</h3>
 <dl>
-<dt id="PDESolver.BoundaryValueProblem.KortewegDeVriesEquation.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
+<dt id="PDESolver.BoundaryValueProblem.KortewegDeVriesEquation.calculate_differentials"><code class="name flex">
+<span>def <span class="ident">calculate_differentials</span></span>(<span>model, freeVariables)</span>
+</code></dt>
 <dd>
 <div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@staticmethod
+def calculate_differentials(model, freeVariables):
+    with tf.GradientTape(persistent=True) as tape:
+        t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
+
+        tape.watch(t)
+        tape.watch(x)
+
+        u = model(tf.stack([t[:, 0], x[:, 0]], axis=1))
+
+        u_t = tape.gradient(u, t)
+        u_x = tape.gradient(u, x)
+
+        u_xx = tape.gradient(u_x, x)
+
+        u_xxx = tape.gradient(u_xx, x)
+
+    del tape
+
+    return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_xxx&#34;: u_xxx}</code></pre>
+</details>
 </dd>
 </dl>
 <h3>Inherited members</h3>
 <ul class="hlist">
 <li><code><b><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></b></code>:
 <ul class="hlist">
-<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials">calculate_differentials</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions">get_conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification">get_specification</a></code></li>
 </ul>
 </li>
 </ul>
@@ -1328,7 +1692,8 @@ def get_debug_string(cls):
 </code></dt>
 <dd>
 <div class="desc"><p>Class defining the Laplace equation in 2D as a boundary value problem.</p>
-<p>(x, y) ⟼ z</p></div>
+<p>(x, y) ⟼ z</p>
+<p>Constructor for a Laplace equation.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -1340,18 +1705,27 @@ def get_debug_string(cls):
     (x, y) ⟼ z
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a Laplace equation.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.zero_boundary = Union(Cuboid([0, 0], [0, 1]), Cuboid([0, 0], [1, 0]), Cuboid([1, 0], [1, 1]))
+        self.f_boundary = Cuboid([0, 1], [1, 1])
+        self.inner = Cuboid([0, 0], [1, 1])
+
+    def get_conditions(self):
         return [
             Condition(&#34;zero_boundary&#34;,
                       lambda Du: Du[&#34;u&#34;],
-                      (Union(Cuboid([0, 0], [0, 1]), Cuboid([0, 0], [1, 0]), Cuboid([1, 0], [1, 1])), 180)),
+                      (self.zero_boundary, 180)),
             Condition(&#34;f_boundary&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.where(tf.abs(Du[&#34;x&#34;] - 0.5) &lt; 0.25, 1., 0.), #2 * Du[&#34;x&#34;] * (1 - Du[&#34;x&#34;]),
-                      (Cuboid([0, 1], [1, 1]), 400), weight=2),
+                      (self.f_boundary, 400)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_xx&#34;] + Du[&#34;u_yy&#34;],
-                      (Cuboid([0, 0], [1, 1]), 1600))
+                      (self.inner, 1600))
         ]
 
     @staticmethod
@@ -1378,18 +1752,45 @@ def get_debug_string(cls):
 <ul class="hlist">
 <li><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></li>
 </ul>
-<h3>Class variables</h3>
+<h3>Static methods</h3>
 <dl>
-<dt id="PDESolver.BoundaryValueProblem.Laplace.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
+<dt id="PDESolver.BoundaryValueProblem.Laplace.calculate_differentials"><code class="name flex">
+<span>def <span class="ident">calculate_differentials</span></span>(<span>model, freeVariables)</span>
+</code></dt>
 <dd>
 <div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@staticmethod
+def calculate_differentials(model, freeVariables):
+    with tf.GradientTape(persistent=True) as tape:
+        x, y = freeVariables[:, 0:1], freeVariables[:, 1:2]
+
+        tape.watch(x)
+        tape.watch(y)
+
+        u = model(tf.stack([x[:, 0], y[:, 0]], axis=1))
+
+        u_x = tape.gradient(u, x)
+        u_y = tape.gradient(u, y)
+
+        u_xx = tape.gradient(u_x, x)
+        u_yy = tape.gradient(u_y, y)
+
+    del tape
+
+    return {&#34;x&#34;: x, &#34;y&#34;: y, &#34;u&#34;: u, &#34;u_x&#34;: u_x, &#34;u_y&#34;: u_y, &#34;u_xx&#34;: u_xx, &#34;u_yy&#34;: u_yy}</code></pre>
+</details>
 </dd>
 </dl>
 <h3>Inherited members</h3>
 <ul class="hlist">
 <li><code><b><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></b></code>:
 <ul class="hlist">
-<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials">calculate_differentials</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions">get_conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification">get_specification</a></code></li>
 </ul>
 </li>
 </ul>
@@ -1399,7 +1800,8 @@ def get_debug_string(cls):
 </code></dt>
 <dd>
 <div class="desc"><p>Class defining the minimal surface equation as a boundary value problem.</p>
-<p>(x, y) ⟼ z</p></div>
+<p>(x, y) ⟼ z</p>
+<p>Constructor for a minimal surface equation.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -1411,19 +1813,28 @@ def get_debug_string(cls):
     (x, y) ⟼ z
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a minimal surface equation.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.boundary1 = Cuboid([0, -1], [0, 1])
+        self.boundary2 = Cuboid([1, -1], [1, 1])
+        self.inner = Cuboid([0, -1], [1, 1])
+
+    def get_conditions(self):
         return [
             Condition(&#34;boundary1&#34;,
                       lambda Du: Du[&#34;u&#34;] - Du[&#34;x&#34;],
-                      (Cuboid([0, -1], [0, 1]), 50)),
+                      (self.boundary1, 50)),
             Condition(&#34;boundary2&#34;,
                       lambda Du: Du[&#34;u&#34;] + Du[&#34;x&#34;],
-                      (Cuboid([1, -1], [1, 1]), 50)),
+                      (self.boundary2, 50)),
             Condition(&#34;inner&#34;,
                       lambda Du: (1 + Du[&#34;u_x&#34;] ** 2) * Du[&#34;u_yy&#34;] - 2 * Du[&#34;u_y&#34;] * Du[&#34;u_x&#34;] * Du[&#34;u_xy&#34;] + (
                               1 + Du[&#34;u_y&#34;] ** 2) * Du[&#34;u_xx&#34;],
-                      (Cuboid([0, -1], [1, 1]), 500))
+                      (self.inner, 500))
         ]
 
     @staticmethod
@@ -1452,18 +1863,47 @@ def get_debug_string(cls):
 <ul class="hlist">
 <li><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></li>
 </ul>
-<h3>Class variables</h3>
+<h3>Static methods</h3>
 <dl>
-<dt id="PDESolver.BoundaryValueProblem.MinimalSurfaceEquation.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
+<dt id="PDESolver.BoundaryValueProblem.MinimalSurfaceEquation.calculate_differentials"><code class="name flex">
+<span>def <span class="ident">calculate_differentials</span></span>(<span>model, freeVariables)</span>
+</code></dt>
 <dd>
 <div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@staticmethod
+def calculate_differentials(model, freeVariables):
+    with tf.GradientTape(persistent=True) as tape:
+        x, y = freeVariables[:, 0:1], freeVariables[:, 1:2]
+
+        tape.watch(x)
+        tape.watch(y)
+
+        u = model(tf.stack([x[:, 0], y[:, 0]], axis=1))
+
+        u_x = tape.gradient(u, x)
+        u_y = tape.gradient(u, y)
+
+        u_xy = tape.gradient(u_x, y)
+
+        u_xx = tape.gradient(u_x, x)
+        u_yy = tape.gradient(u_y, y)
+
+    del tape
+
+    return {&#34;x&#34;: x, &#34;y&#34;: y, &#34;u&#34;: u, &#34;u_x&#34;: u_x, &#34;u_y&#34;: u_y, &#34;u_xy&#34;: u_xy, &#34;u_xx&#34;: u_xx, &#34;u_yy&#34;: u_yy}</code></pre>
+</details>
 </dd>
 </dl>
 <h3>Inherited members</h3>
 <ul class="hlist">
 <li><code><b><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></b></code>:
 <ul class="hlist">
-<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials">calculate_differentials</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions">get_conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification">get_specification</a></code></li>
 </ul>
 </li>
 </ul>
@@ -1473,7 +1913,8 @@ def get_debug_string(cls):
 </code></dt>
 <dd>
 <div class="desc"><p>Class defining the differential algebraic equation for a pendulum.</p>
-<p>t ⟼ (x_1, x_2, lambda)</p></div>
+<p>t ⟼ (x_1, x_2, lambda)</p>
+<p>Constructor for a pendulum.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -1485,10 +1926,23 @@ def get_debug_string(cls):
     t ⟼ (x_1, x_2, lambda)
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a pendulum.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.initialPos = Cuboid([0], [0])
+        self.initialVel = Cuboid([0], [0])
+        self.inner = Cuboid([0], [10])
+        self.constraint = Cuboid([0], [10])
+
+    def get_conditions(self):
         def initPos(t):
             return tf.concat([0 * t + 1, 0 * t], axis=1)
+        
+        def initVel(t):
+            return tf.concat([0 * t + 0, 0 * t + 0], axis=1)
 
         def ode(u, t, alpha):
             return -alpha * u - tf.concat([0 * t, 0 * t + 1.5], axis=1)
@@ -1496,16 +1950,16 @@ def get_debug_string(cls):
         return [
             Condition(&#34;initialPos&#34;,
                       lambda Du: Du[&#34;u&#34;] - initPos(Du[&#34;t&#34;]),
-                      (Cuboid([0], [0]), 10)),
+                      (self.initialPos, 128)),
             Condition(&#34;initialVel&#34;,
-                      lambda Du: Du[&#34;u_t&#34;],
-                      (Cuboid([0], [0]), 10)),
-            Condition(&#34;ode&#34;,
+                      lambda Du: Du[&#34;u_t&#34;] - initVel(Du[&#34;t&#34;]),
+                      (self.initialVel, 128)),
+            Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_tt&#34;] - ode(Du[&#34;u&#34;], Du[&#34;t&#34;], Du[&#34;alpha&#34;]),
-                      (Cuboid([0], [10]), 500)),
+                      (self.inner, 128)),
             Condition(&#34;constraint&#34;,
                       lambda Du: tf.norm(Du[&#34;u&#34;], axis=1)**2 - 1.,
-                      (Cuboid([0], [10]), 500))
+                      (self.constraint, 128))
         ]
 
     @staticmethod
@@ -1547,28 +2001,150 @@ def get_debug_string(cls):
 <ul class="hlist">
 <li><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></li>
 </ul>
-<h3>Class variables</h3>
+<h3>Static methods</h3>
 <dl>
-<dt id="PDESolver.BoundaryValueProblem.Pendulum.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
+<dt id="PDESolver.BoundaryValueProblem.Pendulum.calculate_differentials"><code class="name flex">
+<span>def <span class="ident">calculate_differentials</span></span>(<span>model, freeVariables)</span>
+</code></dt>
 <dd>
 <div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@staticmethod
+def calculate_differentials(model, freeVariables):
+    def u1(x):
+        return model(x)[:, 0]
+
+    def u2(x):
+        return model(x)[:, 1]
+
+    def lagrange(x):
+        return model(x)[:, 2]
+
+
+    with tf.GradientTape(persistent=True) as tape:
+        t = freeVariables[:, 0:1]
+
+        tape.watch(t)
+
+        ux = u1(t)
+        uy = u2(t)
+        alpha = tf.transpose(tf.stack([lagrange(t)]))
+
+        ux_t = tape.gradient(ux, t)
+        uy_t = tape.gradient(uy, t)
+
+        ux_tt = tape.gradient(ux_t, t)
+        uy_tt = tape.gradient(uy_t, t)
+
+        u = tf.stack([ux, uy], axis=1)
+        u_t = tf.concat([ux_t, uy_t], axis=1)
+        u_tt = tf.concat([ux_tt, uy_tt], axis=1)
+
+    del tape
+
+    return {&#34;t&#34;: t, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_tt&#34;: u_tt, &#34;alpha&#34;: alpha}</code></pre>
+</details>
 </dd>
 </dl>
 <h3>Inherited members</h3>
 <ul class="hlist">
 <li><code><b><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></b></code>:
 <ul class="hlist">
-<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials">calculate_differentials</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions">get_conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification">get_specification</a></code></li>
 </ul>
 </li>
 </ul>
+</dd>
+<dt id="PDESolver.BoundaryValueProblem.Specification"><code class="flex name class">
+<span>class <span class="ident">Specification</span></span>
+<span>(</span><span>components, variables, differentials)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Class for defining the specification of a boundary value problem.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>components</code></strong> :&ensp;<code>list</code></dt>
+<dd>List of components of the boundary value problem</dd>
+<dt><strong><code>variables</code></strong> :&ensp;<code>list</code></dt>
+<dd>List of variables of the boundary value problem</dd>
+<dt><strong><code>differentials</code></strong> :&ensp;<code>list</code></dt>
+<dd>List of differentials of the boundary value problem</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class Specification:
+    def __init__(self, components, variables, differentials):
+        &#34;&#34;&#34;
+        Class for defining the specification of a boundary value problem.
+
+        Parameters
+        -----------
+        components: list
+            List of components of the boundary value problem
+        variables: list
+            List of variables of the boundary value problem
+        differentials: list
+            List of differentials of the boundary value problem
+        &#34;&#34;&#34;
+
+        self.components = components
+        self.variables = variables
+        self.differentials = differentials
+
+    def as_dictionary(self):
+        &#34;&#34;&#34;
+        Returns the specification as a dictionary.
+
+        Returns
+        -----------
+        dict: Specification of form {&#34;components&#34;: [str], &#34;variables&#34;: [str], &#34;differentials&#34;: [str]}
+        &#34;&#34;&#34;
+
+        return {&#34;components&#34;: self.components, &#34;variables&#34;: self.variables, &#34;differentials&#34;: self.differentials}</code></pre>
+</details>
+<h3>Methods</h3>
+<dl>
+<dt id="PDESolver.BoundaryValueProblem.Specification.as_dictionary"><code class="name flex">
+<span>def <span class="ident">as_dictionary</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Returns the specification as a dictionary.</p>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>dict</code></strong> :&ensp;<code><a title="PDESolver.BoundaryValueProblem.Specification" href="#PDESolver.BoundaryValueProblem.Specification">Specification</a></code> of <code>form {"components": [str], "variables": [str], "differentials": [str]}</code></dt>
+<dd>&nbsp;</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def as_dictionary(self):
+    &#34;&#34;&#34;
+    Returns the specification as a dictionary.
+
+    Returns
+    -----------
+    dict: Specification of form {&#34;components&#34;: [str], &#34;variables&#34;: [str], &#34;differentials&#34;: [str]}
+    &#34;&#34;&#34;
+
+    return {&#34;components&#34;: self.components, &#34;variables&#34;: self.variables, &#34;differentials&#34;: self.differentials}</code></pre>
+</details>
+</dd>
+</dl>
 </dd>
 <dt id="PDESolver.BoundaryValueProblem.VanDerPolEquation"><code class="flex name class">
 <span>class <span class="ident">VanDerPolEquation</span></span>
 </code></dt>
 <dd>
 <div class="desc"><p>Class defining the Van-der-Pol equation as a boundary value problem.</p>
-<p>(t, x) ⟼ y</p></div>
+<p>(t, x) ⟼ y</p>
+<p>Constructor for a Van-der-Pol equation.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -1580,21 +2156,31 @@ def get_debug_string(cls):
     (t, x) ⟼ y
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a Van-der-Pol equation.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.initial = Cuboid([0, 0], [4, 0])
+        self.boundary = Cuboid([0, 0], [4, 0])
+        self.helper = Cuboid([0, 0], [0, 10])
+        self.inner = Cuboid([0, 0], [4, 10])
+
+    def conditions(self):
         return [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - 1,
-                      (Cuboid([0, 0], [4, 0]), 200)),
+                      (self.initial, 200)),
             Condition(&#34;boundary&#34;,
                       lambda Du: Du[&#34;u_x&#34;],
-                      (Cuboid([0, 0], [4, 0]), 200)),
+                      (self.boundary, 200)),
             Condition(&#34;helper&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.cos(Du[&#34;x&#34;]),
-                      (Cuboid([0, 0], [0, 10]), 200)),
+                      (self.helper, 200)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_xx&#34;] - Du[&#34;t&#34;] * (1 - Du[&#34;u&#34;] ** 2) * Du[&#34;u_x&#34;] + Du[&#34;u&#34;],
-                      (Cuboid([0, 0], [4, 10]), 3000))
+                      (self.inner, 3000))
         ]
 
     @staticmethod
@@ -1619,18 +2205,72 @@ def get_debug_string(cls):
 <ul class="hlist">
 <li><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></li>
 </ul>
-<h3>Class variables</h3>
+<h3>Static methods</h3>
 <dl>
-<dt id="PDESolver.BoundaryValueProblem.VanDerPolEquation.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
+<dt id="PDESolver.BoundaryValueProblem.VanDerPolEquation.calculate_differentials"><code class="name flex">
+<span>def <span class="ident">calculate_differentials</span></span>(<span>model, freeVariables)</span>
+</code></dt>
 <dd>
 <div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@staticmethod
+def calculate_differentials(model, freeVariables):
+    with tf.GradientTape(persistent=True) as tape:
+        t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
+
+        tape.watch(t)
+        tape.watch(x)
+
+        u = model(tf.stack([t[:, 0], x[:, 0]], axis=1))
+
+        u_x = tape.gradient(u, x)
+
+        u_xx = tape.gradient(u_x, x)
+
+    del tape
+
+    return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;u&#34;: u, &#34;u_x&#34;: u_x, &#34;u_xx&#34;: u_xx}</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Methods</h3>
+<dl>
+<dt id="PDESolver.BoundaryValueProblem.VanDerPolEquation.conditions"><code class="name flex">
+<span>def <span class="ident">conditions</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def conditions(self):
+    return [
+        Condition(&#34;initial&#34;,
+                  lambda Du: Du[&#34;u&#34;] - 1,
+                  (self.initial, 200)),
+        Condition(&#34;boundary&#34;,
+                  lambda Du: Du[&#34;u_x&#34;],
+                  (self.boundary, 200)),
+        Condition(&#34;helper&#34;,
+                  lambda Du: Du[&#34;u&#34;] - tf.cos(Du[&#34;x&#34;]),
+                  (self.helper, 200)),
+        Condition(&#34;inner&#34;,
+                  lambda Du: Du[&#34;u_xx&#34;] - Du[&#34;t&#34;] * (1 - Du[&#34;u&#34;] ** 2) * Du[&#34;u_x&#34;] + Du[&#34;u&#34;],
+                  (self.inner, 3000))
+    ]</code></pre>
+</details>
 </dd>
 </dl>
 <h3>Inherited members</h3>
 <ul class="hlist">
 <li><code><b><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></b></code>:
 <ul class="hlist">
-<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials">calculate_differentials</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions">get_conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification">get_specification</a></code></li>
 </ul>
 </li>
 </ul>
@@ -1640,7 +2280,8 @@ def get_debug_string(cls):
 </code></dt>
 <dd>
 <div class="desc"><p>Class defining the 1D wave equation as a boundary value problem.</p>
-<p>(t, x) ⟼ y</p></div>
+<p>(t, x) ⟼ y</p>
+<p>Constructor for a 1D wave equation.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -1652,18 +2293,28 @@ def get_debug_string(cls):
     (t, x) ⟼ y
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a 1D wave equation.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.initial = Cuboid([0, -1], [0, 1])
+        self.boundary1 = Cuboid([0, -1], [0, 1])
+        self.inner = Cuboid([0, -1], [1, 1])
+
+    
+    def get_conditions(self):
         return [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - 1 / (200*(Du[&#34;x&#34;] + 0.5)**2 + 1) - 1 / (200*(Du[&#34;x&#34;] - 0.5)**2 + 2),
-                      (Cuboid([0, -1], [0, 1]), 100), weight=2),
+                      (self.initial, 128)),
             Condition(&#34;boundary1&#34;,
                       lambda Du: Du[&#34;u_t&#34;],
-                      (Cuboid([0, -1], [0, 1]), 100), weight=2),
+                      (self.boundary1, 128)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_tt&#34;] - Du[&#34;u_xx&#34;],
-                      (Cuboid([0, -1], [1, 1]), 900))
+                      (self.inner, 128))
         ]
 
     @staticmethod
@@ -1690,18 +2341,45 @@ def get_debug_string(cls):
 <ul class="hlist">
 <li><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></li>
 </ul>
-<h3>Class variables</h3>
+<h3>Static methods</h3>
 <dl>
-<dt id="PDESolver.BoundaryValueProblem.WaveEquation1D.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
+<dt id="PDESolver.BoundaryValueProblem.WaveEquation1D.calculate_differentials"><code class="name flex">
+<span>def <span class="ident">calculate_differentials</span></span>(<span>model, freeVariables)</span>
+</code></dt>
 <dd>
 <div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@staticmethod
+def calculate_differentials(model, freeVariables):
+    with tf.GradientTape(persistent=True) as tape:
+        t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
+
+        tape.watch(t)
+        tape.watch(x)
+
+        u = model(tf.stack([t[:, 0], x[:, 0]], axis=1))
+
+        u_t = tape.gradient(u, t)
+        u_x = tape.gradient(u, x)
+
+        u_tt = tape.gradient(u_t, t)
+        u_xx = tape.gradient(u_x, x)
+
+    del tape
+
+    return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_tt&#34;: u_tt, &#34;u_xx&#34;: u_xx}</code></pre>
+</details>
 </dd>
 </dl>
 <h3>Inherited members</h3>
 <ul class="hlist">
 <li><code><b><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></b></code>:
 <ul class="hlist">
-<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials">calculate_differentials</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions">get_conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification">get_specification</a></code></li>
 </ul>
 </li>
 </ul>
@@ -1711,7 +2389,8 @@ def get_debug_string(cls):
 </code></dt>
 <dd>
 <div class="desc"><p>Class defining the 2D wave equation as a boundary value problem.</p>
-<p>(t, x, y) ⟼ z</p></div>
+<p>(t, x, y) ⟼ z</p>
+<p>Constructor for a 2D wave equation.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -1723,15 +2402,23 @@ def get_debug_string(cls):
     (t, x, y) ⟼ z
     &#34;&#34;&#34;
 
-    @classproperty
-    def conditions(cls):
+    def __init__(self):
+        &#34;&#34;&#34;
+        Constructor for a 2D wave equation.
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.initial_u = Cuboid([0, -2, -2], [0, 2, 2])
+        self.inner = Cuboid([0, -2, -2], [2, 2, 2])
+
+    def get_conditions(self):
         return [
             Condition(&#34;initial_u&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.exp(-Du[&#34;x&#34;] ** 2 - Du[&#34;y&#34;] ** 2) ** 4,
-                      (Cuboid([0, -2, -2], [0, 2, 2]), 400)),
+                      (self.initial_u, 400)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_tt&#34;] - Du[&#34;u_xx&#34;] - Du[&#34;u_yy&#34;],
-                      (Cuboid([0, -2, -2], [2, 2, 2]), 4900))
+                      (self.inner, 4900))
         ]
 
     @staticmethod
@@ -1762,25 +2449,10 @@ def get_debug_string(cls):
 <ul class="hlist">
 <li><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></li>
 </ul>
-<h3>Class variables</h3>
+<h3>Static methods</h3>
 <dl>
-<dt id="PDESolver.BoundaryValueProblem.WaveEquation2D.conditions"><code class="name">var <span class="ident">conditions</span></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-</dl>
-<h3>Inherited members</h3>
-<ul class="hlist">
-<li><code><b><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></b></code>:
-<ul class="hlist">
-<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials">calculate_differentials</a></code></li>
-</ul>
-</li>
-</ul>
-</dd>
-<dt id="PDESolver.BoundaryValueProblem.classproperty"><code class="flex name class">
-<span>class <span class="ident">classproperty</span></span>
-<span>(</span><span>fget)</span>
+<dt id="PDESolver.BoundaryValueProblem.WaveEquation2D.calculate_differentials"><code class="name flex">
+<span>def <span class="ident">calculate_differentials</span></span>(<span>model, freeVariables)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
@@ -1788,13 +2460,41 @@ def get_debug_string(cls):
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">class classproperty(object):
-    def __init__(self, fget):
-        self.fget = fget
+<pre><code class="python">@staticmethod
+def calculate_differentials(model, freeVariables):
+    with tf.GradientTape(persistent=True) as tape:
+        t, x, y = freeVariables[:, 0:1], freeVariables[:, 1:2], freeVariables[:, 2:3]
 
-    def __get__(self, owner_self, owner_cls):
-        return self.fget(owner_cls)</code></pre>
+        tape.watch(t)
+        tape.watch(x)
+        tape.watch(y)
+
+        u = model(tf.stack([t[:, 0], x[:, 0], y[:, 0]], axis=1))
+
+        u_t = tape.gradient(u, t)
+        u_x = tape.gradient(u, x)
+        u_y = tape.gradient(u, y)
+
+        u_tt = tape.gradient(u_t, t)
+        u_xx = tape.gradient(u_x, x)
+        u_yy = tape.gradient(u_y, y)
+
+    del tape
+
+    return {&#34;t&#34;: t, &#34;x&#34;: x, &#34;y&#34;: y, &#34;u&#34;: u, &#34;u_t&#34;: u_t, &#34;u_x&#34;: u_x, &#34;u_y&#34;: u_yy, &#34;u_tt&#34;: u_tt, &#34;u_xx&#34;: u_xx,
+            &#34;u_yy&#34;: u_yy}</code></pre>
 </details>
+</dd>
+</dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></b></code>:
+<ul class="hlist">
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions">get_conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification">get_specification</a></code></li>
+</ul>
+</li>
+</ul>
 </dd>
 </dl>
 </section>
@@ -1815,91 +2515,95 @@ def get_debug_string(cls):
 <li>
 <h4><code><a title="PDESolver.BoundaryValueProblem.AllenCahnEquation" href="#PDESolver.BoundaryValueProblem.AllenCahnEquation">AllenCahnEquation</a></code></h4>
 <ul class="">
-<li><code><a title="PDESolver.BoundaryValueProblem.AllenCahnEquation.conditions" href="#PDESolver.BoundaryValueProblem.AllenCahnEquation.conditions">conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.AllenCahnEquation.calculate_differentials" href="#PDESolver.BoundaryValueProblem.AllenCahnEquation.calculate_differentials">calculate_differentials</a></code></li>
 </ul>
 </li>
 <li>
 <h4><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem">BoundaryValueProblem</a></code></h4>
 <ul class="">
-<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.calculate_differentials">calculate_differentials</a></code></li>
-<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.conditions" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.conditions">conditions</a></code></li>
-<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_debug_string" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_debug_string">get_debug_string</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_conditions">get_conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification" href="#PDESolver.BoundaryValueProblem.BoundaryValueProblem.get_specification">get_specification</a></code></li>
 </ul>
 </li>
 <li>
 <h4><code><a title="PDESolver.BoundaryValueProblem.BurgersEquation" href="#PDESolver.BoundaryValueProblem.BurgersEquation">BurgersEquation</a></code></h4>
 <ul class="">
-<li><code><a title="PDESolver.BoundaryValueProblem.BurgersEquation.conditions" href="#PDESolver.BoundaryValueProblem.BurgersEquation.conditions">conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.BurgersEquation.calculate_differentials" href="#PDESolver.BoundaryValueProblem.BurgersEquation.calculate_differentials">calculate_differentials</a></code></li>
 </ul>
 </li>
 <li>
 <h4><code><a title="PDESolver.BoundaryValueProblem.Condition" href="#PDESolver.BoundaryValueProblem.Condition">Condition</a></code></h4>
 <ul class="">
+<li><code><a title="PDESolver.BoundaryValueProblem.Condition.get_normalization_constants" href="#PDESolver.BoundaryValueProblem.Condition.get_normalization_constants">get_normalization_constants</a></code></li>
 <li><code><a title="PDESolver.BoundaryValueProblem.Condition.get_region_bounds" href="#PDESolver.BoundaryValueProblem.Condition.get_region_bounds">get_region_bounds</a></code></li>
 </ul>
 </li>
 <li>
 <h4><code><a title="PDESolver.BoundaryValueProblem.ConvectionDiffusionEquation" href="#PDESolver.BoundaryValueProblem.ConvectionDiffusionEquation">ConvectionDiffusionEquation</a></code></h4>
 <ul class="">
-<li><code><a title="PDESolver.BoundaryValueProblem.ConvectionDiffusionEquation.conditions" href="#PDESolver.BoundaryValueProblem.ConvectionDiffusionEquation.conditions">conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.ConvectionDiffusionEquation.calculate_differentials" href="#PDESolver.BoundaryValueProblem.ConvectionDiffusionEquation.calculate_differentials">calculate_differentials</a></code></li>
 </ul>
 </li>
 <li>
 <h4><code><a title="PDESolver.BoundaryValueProblem.HeatEquation1D" href="#PDESolver.BoundaryValueProblem.HeatEquation1D">HeatEquation1D</a></code></h4>
 <ul class="">
-<li><code><a title="PDESolver.BoundaryValueProblem.HeatEquation1D.conditions" href="#PDESolver.BoundaryValueProblem.HeatEquation1D.conditions">conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.HeatEquation1D.calculate_differentials" href="#PDESolver.BoundaryValueProblem.HeatEquation1D.calculate_differentials">calculate_differentials</a></code></li>
 </ul>
 </li>
 <li>
 <h4><code><a title="PDESolver.BoundaryValueProblem.HeatEquation2D" href="#PDESolver.BoundaryValueProblem.HeatEquation2D">HeatEquation2D</a></code></h4>
 <ul class="">
-<li><code><a title="PDESolver.BoundaryValueProblem.HeatEquation2D.conditions" href="#PDESolver.BoundaryValueProblem.HeatEquation2D.conditions">conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.HeatEquation2D.calculate_differentials" href="#PDESolver.BoundaryValueProblem.HeatEquation2D.calculate_differentials">calculate_differentials</a></code></li>
 </ul>
 </li>
 <li>
 <h4><code><a title="PDESolver.BoundaryValueProblem.KortewegDeVriesEquation" href="#PDESolver.BoundaryValueProblem.KortewegDeVriesEquation">KortewegDeVriesEquation</a></code></h4>
 <ul class="">
-<li><code><a title="PDESolver.BoundaryValueProblem.KortewegDeVriesEquation.conditions" href="#PDESolver.BoundaryValueProblem.KortewegDeVriesEquation.conditions">conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.KortewegDeVriesEquation.calculate_differentials" href="#PDESolver.BoundaryValueProblem.KortewegDeVriesEquation.calculate_differentials">calculate_differentials</a></code></li>
 </ul>
 </li>
 <li>
 <h4><code><a title="PDESolver.BoundaryValueProblem.Laplace" href="#PDESolver.BoundaryValueProblem.Laplace">Laplace</a></code></h4>
 <ul class="">
-<li><code><a title="PDESolver.BoundaryValueProblem.Laplace.conditions" href="#PDESolver.BoundaryValueProblem.Laplace.conditions">conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.Laplace.calculate_differentials" href="#PDESolver.BoundaryValueProblem.Laplace.calculate_differentials">calculate_differentials</a></code></li>
 </ul>
 </li>
 <li>
 <h4><code><a title="PDESolver.BoundaryValueProblem.MinimalSurfaceEquation" href="#PDESolver.BoundaryValueProblem.MinimalSurfaceEquation">MinimalSurfaceEquation</a></code></h4>
 <ul class="">
-<li><code><a title="PDESolver.BoundaryValueProblem.MinimalSurfaceEquation.conditions" href="#PDESolver.BoundaryValueProblem.MinimalSurfaceEquation.conditions">conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.MinimalSurfaceEquation.calculate_differentials" href="#PDESolver.BoundaryValueProblem.MinimalSurfaceEquation.calculate_differentials">calculate_differentials</a></code></li>
 </ul>
 </li>
 <li>
 <h4><code><a title="PDESolver.BoundaryValueProblem.Pendulum" href="#PDESolver.BoundaryValueProblem.Pendulum">Pendulum</a></code></h4>
 <ul class="">
-<li><code><a title="PDESolver.BoundaryValueProblem.Pendulum.conditions" href="#PDESolver.BoundaryValueProblem.Pendulum.conditions">conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.Pendulum.calculate_differentials" href="#PDESolver.BoundaryValueProblem.Pendulum.calculate_differentials">calculate_differentials</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="PDESolver.BoundaryValueProblem.Specification" href="#PDESolver.BoundaryValueProblem.Specification">Specification</a></code></h4>
+<ul class="">
+<li><code><a title="PDESolver.BoundaryValueProblem.Specification.as_dictionary" href="#PDESolver.BoundaryValueProblem.Specification.as_dictionary">as_dictionary</a></code></li>
 </ul>
 </li>
 <li>
 <h4><code><a title="PDESolver.BoundaryValueProblem.VanDerPolEquation" href="#PDESolver.BoundaryValueProblem.VanDerPolEquation">VanDerPolEquation</a></code></h4>
 <ul class="">
+<li><code><a title="PDESolver.BoundaryValueProblem.VanDerPolEquation.calculate_differentials" href="#PDESolver.BoundaryValueProblem.VanDerPolEquation.calculate_differentials">calculate_differentials</a></code></li>
 <li><code><a title="PDESolver.BoundaryValueProblem.VanDerPolEquation.conditions" href="#PDESolver.BoundaryValueProblem.VanDerPolEquation.conditions">conditions</a></code></li>
 </ul>
 </li>
 <li>
 <h4><code><a title="PDESolver.BoundaryValueProblem.WaveEquation1D" href="#PDESolver.BoundaryValueProblem.WaveEquation1D">WaveEquation1D</a></code></h4>
 <ul class="">
-<li><code><a title="PDESolver.BoundaryValueProblem.WaveEquation1D.conditions" href="#PDESolver.BoundaryValueProblem.WaveEquation1D.conditions">conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.WaveEquation1D.calculate_differentials" href="#PDESolver.BoundaryValueProblem.WaveEquation1D.calculate_differentials">calculate_differentials</a></code></li>
 </ul>
 </li>
 <li>
 <h4><code><a title="PDESolver.BoundaryValueProblem.WaveEquation2D" href="#PDESolver.BoundaryValueProblem.WaveEquation2D">WaveEquation2D</a></code></h4>
 <ul class="">
-<li><code><a title="PDESolver.BoundaryValueProblem.WaveEquation2D.conditions" href="#PDESolver.BoundaryValueProblem.WaveEquation2D.conditions">conditions</a></code></li>
+<li><code><a title="PDESolver.BoundaryValueProblem.WaveEquation2D.calculate_differentials" href="#PDESolver.BoundaryValueProblem.WaveEquation2D.calculate_differentials">calculate_differentials</a></code></li>
 </ul>
-</li>
-<li>
-<h4><code><a title="PDESolver.BoundaryValueProblem.classproperty" href="#PDESolver.BoundaryValueProblem.classproperty">classproperty</a></code></h4>
 </li>
 </ul>
 </li>

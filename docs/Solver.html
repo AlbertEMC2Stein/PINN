@@ -27,15 +27,25 @@
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">import os
-from time import time
-import tensorflow as tf
+<pre><code class="python">import tensorflow as tf
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.stats import gaussian_kde
+from tqdm import tqdm
+import warnings
+import logging
+import os
+from sys import stdout
 
-os.environ[&#39;TF_CPP_MIN_LOG_LEVEL&#39;] = &#39;3&#39;
+__all__ = [&#39;Solver&#39;]    
+
+warnings.filterwarnings(&#34;ignore&#34;, category=UserWarning)
+logging.getLogger(&#39;tensorflow&#39;).setLevel(logging.ERROR)
+os.environ[&#39;TF_CPP_MIN_LOG_LEVEL&#39;] = &#39;2&#39;
 
 
 class Solver:
-    def __init__(self, bvp, num_inputs=2, num_outputs=1, num_hidden_layers=6, num_neurons_per_layer=16):
+    def __init__(self, bvp, num_hidden_layers=4, num_neurons_per_layer=50):
         &#34;&#34;&#34;
         Constructor for the Solver class.
 
@@ -43,32 +53,140 @@ class Solver:
         -----------
         bvp: BoundaryValueProblem
             Boundary value problem to be solved
-        num_inputs: int
-            Number of inputs to the neural network
-        num_outputs: int
-            Number of outputs from the neural network
         num_hidden_layers: int
             Number of hidden layers in the neural network
+            Defaults to 4
         num_neurons_per_layer:  int
             Number of neurons in each hidden layer
+            Defaults to 50
         &#34;&#34;&#34;
 
-        model = tf.keras.Sequential()
-        model.add(tf.keras.Input(num_inputs))
+        num_inputs = len(bvp.get_specification()[&#39;variables&#39;])
+        num_outputs = len(bvp.get_specification()[&#39;components&#39;])
+        inner_constraint = [condition for condition in bvp.get_conditions() if condition.name == &#39;inner&#39;][0]
+        mean, variance = inner_constraint.get_normalization_constants()
 
-        for _ in range(num_hidden_layers):
-            model.add(tf.keras.layers.Dense(num_neurons_per_layer,
-                                            activation=tf.keras.activations.tanh,
-                                            kernel_initializer=&#39;glorot_normal&#39;))
-
-        model.add(tf.keras.layers.Dense(num_outputs))
-
-        self.model = model
+        self.model = init_model(num_inputs, num_outputs, num_hidden_layers, num_neurons_per_layer, mean, variance)
         self.bvp = bvp
-        self.loss_history = []
-        self.time = 0
 
-    def train(self, optimizer, lr_scheduler, iterations=10000):
+        self.loss_history = []
+        self.weight_history = [1]
+        self.weights = None
+        self.step = None
+
+    def compute_differentials(self, samplePoints):
+        &#34;&#34;&#34;
+        Calculates the differentials of the model at the given points.
+
+        Parameters
+        -----------
+        model: neural network
+            Model to calculate the differentials of
+        samplePoints: tensor
+            Tensor of points to calculate the differentials at
+
+        Returns
+        -----------
+        gradient_dict: dict
+            Dictionary containing the differentials of the model needed for the bvp at the given points
+        &#34;&#34;&#34;
+
+        specs = self.bvp.get_specification()
+
+        component_funs = {component: lambda x: self.model(x)[:, i] 
+                          for i, component in enumerate(specs[&#34;components&#34;])}
+
+        gradient_dict = {}
+
+        with tf.GradientTape(persistent=True) as tape:
+            for i, variable in enumerate(specs[&#34;variables&#34;]):
+                gradient_dict[variable] = samplePoints[:, i:i + 1]
+                tape.watch(gradient_dict[variable])
+
+            watched = [gradient_dict[variable] for variable in specs[&#34;variables&#34;]]
+            for component in specs[&#34;components&#34;]:
+                output = component_funs[component](tf.stack(watched, axis=1))
+                gradient_dict[component] = tf.reshape(output, (-1, 1))
+    
+            for differential in specs[&#34;differentials&#34;]:
+                component = differential.split(&#34;_&#34;)[0]
+                variables = differential.split(&#34;_&#34;)[1]
+
+                differential_head = component 
+                for i, variable in enumerate(variables):
+                    if i == 0:
+                        differential_head_new = differential_head + &#34;_&#34; + variable
+                    else:
+                        differential_head_new = differential_head + variable
+
+                    if not differential_head_new in gradient_dict:
+                        gradient_dict[differential_head_new] = tape.gradient(gradient_dict[differential_head], gradient_dict[variable])
+                        differential_head = differential_head_new
+
+        return gradient_dict
+   
+    def compute_residuals(self):
+        &#34;&#34;&#34;
+        Gets the residuals for the boundary value problem.
+
+        Returns
+        -----------
+        dict: Dictionary of residuals of form {condition_name: residual}
+        &#34;&#34;&#34;
+
+        conditions = self.bvp.get_conditions()
+
+        residuals = {}
+        for condition in conditions:
+            samples = condition.sample_points()
+            Du = self.compute_differentials(samples)
+            residuals[condition.name] = condition.residue_fn(Du)
+
+        return residuals
+  
+    def compute_losses(self):
+        &#34;&#34;&#34;
+        Computes the losses for the neural network.
+        
+        Returns
+        -----------
+        tuple: Tuple of losses for the PDE and data
+        &#34;&#34;&#34;
+
+        criterion = tf.keras.losses.MeanSquaredError()
+        residuals = self.compute_residuals()
+
+        pdeloss = 0
+        dataloss = 0
+        for i, (name, residual) in enumerate(residuals.items()):
+            if name == &#39;inner&#39;:
+                pdeloss += self.weights[i] * criterion(residual, 0.0)
+            else:
+                dataloss += self.weights[i] * criterion(residual, 0.0)
+
+        return pdeloss, dataloss 
+ 
+    def compute_gradients(self):
+        &#34;&#34;&#34;
+        Gets the gradients of the neural network.
+
+        Returns
+        -----------
+        tuple: Tuple of gradients
+        &#34;&#34;&#34;
+
+        with tf.GradientTape(persistent=True) as tape:
+            tape.watch(self.model.trainable_variables)
+            pdeloss, dataloss = self.compute_losses()
+            totalloss = pdeloss + dataloss
+
+            pdegrad = tape.gradient(pdeloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
+            datagrad = tape.gradient(dataloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
+            totalgrad = tape.gradient(totalloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
+
+        return totalloss, (pdegrad, datagrad, totalgrad)
+
+    def train(self, optimizer, lr_scheduler, iterations=10000, debug_frequency=2500):
         &#34;&#34;&#34;
         Trains the neural network to solve the boundary value problem.
 
@@ -82,46 +200,209 @@ class Solver:
             Number of iterations to train for
         &#34;&#34;&#34;
 
-        def compute_loss():
-            criterion = tf.keras.losses.Huber()
+        def debug(gradients):
+            fig = plt.figure(figsize=(16, 8), layout=&#39;compressed&#39;)
+            subfigs = fig.subfigures(2, 1, hspace=0)
 
-            loss = 0
-            for cond in self.bvp.conditions:
-                out = cond(self.model, self.bvp)
-                loss += cond.weight * criterion(out, 0)
+            axs = subfigs[0].subplots(1, len(self.model.layers) - 4)
+            subfigs[0].suptitle(&#39;Gradient Distributions&#39;)
 
-            return loss
+            ax_count = -1
+            for j in range(len(self.model.layers)):
+                if j in [0, 1, 3, 4]:
+                    continue
+                else:
+                    ax_count += 1
 
-        def get_grad():
-            with tf.GradientTape(persistent=True) as tape:
-                tape.watch(self.model.trainable_variables)
-                loss = compute_loss()
+                layer_gradient = lambda i: tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients[i][2*(j-2):2*(j-1)]], axis=0)
+                density = lambda i, x: gaussian_kde(layer_gradient(i).numpy())(x)
 
-            g = tape.gradient(loss, self.model.trainable_variables)
-            del tape
+                xs = np.linspace(-2.5, 2.5, 1000)
+                axs[ax_count].plot(xs, density(0, xs), &#39;orange&#39;, lw=0.5, label=&#39;PDE&#39;)
+                axs[ax_count].plot(xs, density(1, xs), &#39;b--&#39;, lw=0.5, label=&#39;Data&#39;)
 
-            return loss, g
+                axs[ax_count].set_xlim(min(xs), max(xs))
+                axs[ax_count].set_ylim(0, 100)
+                axs[ax_count].set_yscale(&#39;symlog&#39;)
+                axs[ax_count].set_title(self.model.layers[j].name)
+                axs[ax_count].legend()
+
+            n = len(self.loss_history)
+            k = min(100, n)
+            averaged_loss = np.convolve(self.loss_history, np.ones(k) / k, mode=&#39;same&#39;)
+
+            axs = subfigs[1].subplots(1, 2)
+            axs[0].semilogy(range(n), self.loss_history, &#39;k-&#39;, lw=0.5)
+            axs[0].semilogy(range(n), averaged_loss, &#39;r--&#39;, lw=1)
+            axs[0].set_title(&#39;Loss History&#39;)
+            axs[0].set_xlabel(&#39;Iteration&#39;)
+            axs[0].set_ylabel(&#39;Loss&#39;)
+            axs[0].set_xlim(0, n - (1 if n &gt; 1 else 0))
+
+            axs[1].plot(self.weight_history, &#39;k&#39;, lw=0.5)
+            axs[1].set_title(&#39;Weight History&#39;)
+            axs[1].set_xlabel(&#39;#Update&#39;)
+            axs[1].set_ylabel(&#39;Weight&#39;)
+            axs[1].set_xlim(0, len(self.weight_history) - 1)
+
+            figManager = plt.get_current_fig_manager()
+            figManager.window.state(&#34;zoomed&#34;)
+            
+            plt.show()
+
+        def adjust_weights(gradients):
+            pde_gradient = tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients[0]], axis=0)
+            data_gradient = tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients[1]], axis=0)
+            new_weight = tf.reduce_max(tf.abs(pde_gradient)) / (tf.reduce_mean(tf.abs(data_gradient)))
+            
+            result = None
+            for i, cond in enumerate(self.bvp.get_conditions()):
+                if cond.name != &#39;inner&#39;:
+                    result = 0.25 * self.weights[i] + 0.75 * new_weight
+                    self.weights[i].assign(result)
+                    
+            return result
 
         @tf.function
         def train_step():
-            # Compute current loss and gradient w.r.t. parameters
-            loss, grad_theta = get_grad()
+            if self.weights is None:
+                self.weights = tf.Variable(np.ones(len(self.bvp.get_conditions())), dtype=tf.float32)
+                
+            if self.step is None:
+                self.step = tf.Variable(0)
+            
+            loss, gradients = self.compute_gradients()
+            
+            if self.step % 10 == 0:
+                new_weight = adjust_weights(gradients)
+            else:
+                new_weight = -1.0
+                
+            optimizer.apply_gradients(zip(gradients[2], self.model.trainable_variables))
+            self.step.assign(self.step + 1)
+            
+            return loss, gradients, new_weight
 
-            # Perform gradient descent step
-            optimizer.apply_gradients(zip(grad_theta, self.model.trainable_variables))
-
-            return loss
-
-        t0 = time()
-        for i in range(iterations + 1):
-            loss = train_step()
+        pbar = tqdm(range(iterations), desc=&#39;Pending...&#39;)
+        for i in pbar:
+            loss, gradients, new_weight = train_step()
+            
             self.loss_history += [loss.numpy()]
+            
+            if new_weight != -1:
+                self.weight_history += [new_weight.numpy()]
+            
+            avgloss = np.mean(self.loss_history[-100:])
+            pbar.desc = &#39;øloss = {:10.8e} lr = {:.5f}&#39;.format(avgloss, lr_scheduler(i))
 
-            if i % 50 == 0:
-                print(&#39;\rIt {:05d}/{:05d}: loss = {:10.8e} lr = {:.5f}&#39;.format(i, iterations, loss, lr_scheduler(i)), end=&#34;&#34;)
+            if i % debug_frequency == 0 or i == iterations - 1:
+                debug(gradients)
 
-        self.time = time() - t0
-        print(&#39;\nComputation time: {:.1f} seconds&#39;.format(self.time))</code></pre>
+
+###################################################################################
+###################################################################################
+###################################################################################
+
+                
+def xavier_init(size):
+    in_dim = size[0]
+    out_dim = size[1]
+    xavier_stddev = 1. / np.sqrt((in_dim + out_dim) / 2.)
+    return tf.Variable(tf.random.normal([in_dim, out_dim], dtype=tf.float32) * xavier_stddev,
+                        dtype=tf.float32, trainable=True)
+
+
+class Encoder(tf.keras.layers.Layer):
+    def __init__(self, inputs, outputs, activation=tf.tanh):
+        super(Encoder, self).__init__()
+        self.inputs = inputs
+        self.outputs = outputs
+        self.activation = activation
+
+    def build(self, input_shape):  
+        self.W = xavier_init([self.inputs, self.outputs]) 
+        self.b = xavier_init([1, self.outputs])
+
+    def call(self, inputs):  # Defines the computation from inputs to outputs
+        return self.activation(tf.add(tf.matmul(inputs, self.W), self.b))
+    
+
+class ImprovedLinear(tf.keras.layers.Layer):
+    def __init__(self, inputs, outputs, activation=tf.tanh):
+        super(ImprovedLinear, self).__init__()
+        self.inputs = inputs
+        self.outputs = outputs
+        self.activation = activation
+
+    def build(self, input_shape):  
+        self.W = xavier_init([self.inputs, self.outputs]) 
+        self.b = xavier_init([1, self.outputs])
+
+    def call(self, inputs, encoder_1, encoder_2):  
+        return tf.math.multiply(self.activation(tf.add(tf.matmul(inputs, self.W), self.b)), encoder_1) + \
+                tf.math.multiply(1 - self.activation(tf.add(tf.matmul(inputs, self.W), self.b)), encoder_2)
+
+
+class Linear(tf.keras.layers.Layer):
+    def __init__(self, inputs, outputs):
+        super(Linear, self).__init__()
+        self.inputs = inputs
+        self.outputs = outputs
+
+    def build(self, input_shape):  
+        self.W = xavier_init([self.inputs, self.outputs]) 
+        self.b = xavier_init([1, self.outputs])
+
+    def call(self, inputs):  
+        return tf.add(tf.matmul(inputs, self.W), self.b)
+
+
+def init_model(num_inputs, num_outputs, num_hidden_layers, num_neurons_per_layer, mean, variance):
+    layer_sizes = [num_inputs] + [num_neurons_per_layer] * num_hidden_layers + [num_outputs] 
+    layers = [Linear(layer_sizes[0], layer_sizes[1])] + \
+             [ImprovedLinear(layer_sizes[i], layer_sizes[i + 1]) for i in range(1, len(layer_sizes) - 2)] + \
+             [Linear(layer_sizes[-2], layer_sizes[-1])]
+
+    encoder_1 = Encoder(num_inputs, num_neurons_per_layer)
+    encoder_2 = Encoder(num_inputs, num_neurons_per_layer)
+
+    inputs = tf.keras.Input(num_inputs)
+    outputs = tf.keras.layers.Normalization(axis=-1, mean=mean, variance=variance)(inputs)
+
+    E1 = encoder_1(outputs)
+    E2 = encoder_2(outputs)  
+    for i in range(len(layers) - 1):
+        if i == 0:
+            outputs = layers[i](outputs)
+        else:
+            outputs = layers[i](outputs, E1, E2)
+
+    outputs = layers[-1](outputs)
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+
+    # model = tf.keras.Sequential()
+    # model.add(tf.keras.Input(num_inputs))
+
+    # for _ in range(num_hidden_layers):
+    #     model.add(tf.keras.layers.Dense(num_neurons_per_layer,
+    #                                     activation=tf.keras.activations.tanh,
+    #                                     kernel_initializer=&#39;glorot_normal&#39;))
+
+    # model.add(tf.keras.layers.Dense(num_outputs))
+
+    return model
+
+
+if __name__ == &#39;__main__&#39;:
+    from Sampling import Cuboid, Equidistant
+
+    tf.random.set_seed(1)
+    txs = Cuboid([0, 0], [1, 1]).pick(9, Equidistant())
+
+    model = init_model(2, 1, 4, 50, mean=-1, variance=1)
+
+    model.summary()
+    print(model(txs)) </code></pre>
 </details>
 </section>
 <section>
@@ -135,7 +416,7 @@ class Solver:
 <dl>
 <dt id="PDESolver.Solver.Solver"><code class="flex name class">
 <span>class <span class="ident">Solver</span></span>
-<span>(</span><span>bvp, num_inputs=2, num_outputs=1, num_hidden_layers=6, num_neurons_per_layer=16)</span>
+<span>(</span><span>bvp, num_hidden_layers=4, num_neurons_per_layer=50)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Constructor for the Solver class.</p>
@@ -143,21 +424,19 @@ class Solver:
 <dl>
 <dt><strong><code>bvp</code></strong> :&ensp;<code>BoundaryValueProblem</code></dt>
 <dd>Boundary value problem to be solved</dd>
-<dt><strong><code>num_inputs</code></strong> :&ensp;<code>int</code></dt>
-<dd>Number of inputs to the neural network</dd>
-<dt><strong><code>num_outputs</code></strong> :&ensp;<code>int</code></dt>
-<dd>Number of outputs from the neural network</dd>
 <dt><strong><code>num_hidden_layers</code></strong> :&ensp;<code>int</code></dt>
-<dd>Number of hidden layers in the neural network</dd>
+<dd>Number of hidden layers in the neural network
+Defaults to 4</dd>
 <dt><strong><code>num_neurons_per_layer</code></strong> :&ensp;<code> int</code></dt>
-<dd>Number of neurons in each hidden layer</dd>
+<dd>Number of neurons in each hidden layer
+Defaults to 50</dd>
 </dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class Solver:
-    def __init__(self, bvp, num_inputs=2, num_outputs=1, num_hidden_layers=6, num_neurons_per_layer=16):
+    def __init__(self, bvp, num_hidden_layers=4, num_neurons_per_layer=50):
         &#34;&#34;&#34;
         Constructor for the Solver class.
 
@@ -165,32 +444,140 @@ class Solver:
         -----------
         bvp: BoundaryValueProblem
             Boundary value problem to be solved
-        num_inputs: int
-            Number of inputs to the neural network
-        num_outputs: int
-            Number of outputs from the neural network
         num_hidden_layers: int
             Number of hidden layers in the neural network
+            Defaults to 4
         num_neurons_per_layer:  int
             Number of neurons in each hidden layer
+            Defaults to 50
         &#34;&#34;&#34;
 
-        model = tf.keras.Sequential()
-        model.add(tf.keras.Input(num_inputs))
+        num_inputs = len(bvp.get_specification()[&#39;variables&#39;])
+        num_outputs = len(bvp.get_specification()[&#39;components&#39;])
+        inner_constraint = [condition for condition in bvp.get_conditions() if condition.name == &#39;inner&#39;][0]
+        mean, variance = inner_constraint.get_normalization_constants()
 
-        for _ in range(num_hidden_layers):
-            model.add(tf.keras.layers.Dense(num_neurons_per_layer,
-                                            activation=tf.keras.activations.tanh,
-                                            kernel_initializer=&#39;glorot_normal&#39;))
-
-        model.add(tf.keras.layers.Dense(num_outputs))
-
-        self.model = model
+        self.model = init_model(num_inputs, num_outputs, num_hidden_layers, num_neurons_per_layer, mean, variance)
         self.bvp = bvp
-        self.loss_history = []
-        self.time = 0
 
-    def train(self, optimizer, lr_scheduler, iterations=10000):
+        self.loss_history = []
+        self.weight_history = [1]
+        self.weights = None
+        self.step = None
+
+    def compute_differentials(self, samplePoints):
+        &#34;&#34;&#34;
+        Calculates the differentials of the model at the given points.
+
+        Parameters
+        -----------
+        model: neural network
+            Model to calculate the differentials of
+        samplePoints: tensor
+            Tensor of points to calculate the differentials at
+
+        Returns
+        -----------
+        gradient_dict: dict
+            Dictionary containing the differentials of the model needed for the bvp at the given points
+        &#34;&#34;&#34;
+
+        specs = self.bvp.get_specification()
+
+        component_funs = {component: lambda x: self.model(x)[:, i] 
+                          for i, component in enumerate(specs[&#34;components&#34;])}
+
+        gradient_dict = {}
+
+        with tf.GradientTape(persistent=True) as tape:
+            for i, variable in enumerate(specs[&#34;variables&#34;]):
+                gradient_dict[variable] = samplePoints[:, i:i + 1]
+                tape.watch(gradient_dict[variable])
+
+            watched = [gradient_dict[variable] for variable in specs[&#34;variables&#34;]]
+            for component in specs[&#34;components&#34;]:
+                output = component_funs[component](tf.stack(watched, axis=1))
+                gradient_dict[component] = tf.reshape(output, (-1, 1))
+    
+            for differential in specs[&#34;differentials&#34;]:
+                component = differential.split(&#34;_&#34;)[0]
+                variables = differential.split(&#34;_&#34;)[1]
+
+                differential_head = component 
+                for i, variable in enumerate(variables):
+                    if i == 0:
+                        differential_head_new = differential_head + &#34;_&#34; + variable
+                    else:
+                        differential_head_new = differential_head + variable
+
+                    if not differential_head_new in gradient_dict:
+                        gradient_dict[differential_head_new] = tape.gradient(gradient_dict[differential_head], gradient_dict[variable])
+                        differential_head = differential_head_new
+
+        return gradient_dict
+   
+    def compute_residuals(self):
+        &#34;&#34;&#34;
+        Gets the residuals for the boundary value problem.
+
+        Returns
+        -----------
+        dict: Dictionary of residuals of form {condition_name: residual}
+        &#34;&#34;&#34;
+
+        conditions = self.bvp.get_conditions()
+
+        residuals = {}
+        for condition in conditions:
+            samples = condition.sample_points()
+            Du = self.compute_differentials(samples)
+            residuals[condition.name] = condition.residue_fn(Du)
+
+        return residuals
+  
+    def compute_losses(self):
+        &#34;&#34;&#34;
+        Computes the losses for the neural network.
+        
+        Returns
+        -----------
+        tuple: Tuple of losses for the PDE and data
+        &#34;&#34;&#34;
+
+        criterion = tf.keras.losses.MeanSquaredError()
+        residuals = self.compute_residuals()
+
+        pdeloss = 0
+        dataloss = 0
+        for i, (name, residual) in enumerate(residuals.items()):
+            if name == &#39;inner&#39;:
+                pdeloss += self.weights[i] * criterion(residual, 0.0)
+            else:
+                dataloss += self.weights[i] * criterion(residual, 0.0)
+
+        return pdeloss, dataloss 
+ 
+    def compute_gradients(self):
+        &#34;&#34;&#34;
+        Gets the gradients of the neural network.
+
+        Returns
+        -----------
+        tuple: Tuple of gradients
+        &#34;&#34;&#34;
+
+        with tf.GradientTape(persistent=True) as tape:
+            tape.watch(self.model.trainable_variables)
+            pdeloss, dataloss = self.compute_losses()
+            totalloss = pdeloss + dataloss
+
+            pdegrad = tape.gradient(pdeloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
+            datagrad = tape.gradient(dataloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
+            totalgrad = tape.gradient(totalloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
+
+        return totalloss, (pdegrad, datagrad, totalgrad)
+
+    def train(self, optimizer, lr_scheduler, iterations=10000, debug_frequency=2500):
         &#34;&#34;&#34;
         Trains the neural network to solve the boundary value problem.
 
@@ -204,51 +591,287 @@ class Solver:
             Number of iterations to train for
         &#34;&#34;&#34;
 
-        def compute_loss():
-            criterion = tf.keras.losses.Huber()
+        def debug(gradients):
+            fig = plt.figure(figsize=(16, 8), layout=&#39;compressed&#39;)
+            subfigs = fig.subfigures(2, 1, hspace=0)
 
-            loss = 0
-            for cond in self.bvp.conditions:
-                out = cond(self.model, self.bvp)
-                loss += cond.weight * criterion(out, 0)
+            axs = subfigs[0].subplots(1, len(self.model.layers) - 4)
+            subfigs[0].suptitle(&#39;Gradient Distributions&#39;)
 
-            return loss
+            ax_count = -1
+            for j in range(len(self.model.layers)):
+                if j in [0, 1, 3, 4]:
+                    continue
+                else:
+                    ax_count += 1
 
-        def get_grad():
-            with tf.GradientTape(persistent=True) as tape:
-                tape.watch(self.model.trainable_variables)
-                loss = compute_loss()
+                layer_gradient = lambda i: tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients[i][2*(j-2):2*(j-1)]], axis=0)
+                density = lambda i, x: gaussian_kde(layer_gradient(i).numpy())(x)
 
-            g = tape.gradient(loss, self.model.trainable_variables)
-            del tape
+                xs = np.linspace(-2.5, 2.5, 1000)
+                axs[ax_count].plot(xs, density(0, xs), &#39;orange&#39;, lw=0.5, label=&#39;PDE&#39;)
+                axs[ax_count].plot(xs, density(1, xs), &#39;b--&#39;, lw=0.5, label=&#39;Data&#39;)
 
-            return loss, g
+                axs[ax_count].set_xlim(min(xs), max(xs))
+                axs[ax_count].set_ylim(0, 100)
+                axs[ax_count].set_yscale(&#39;symlog&#39;)
+                axs[ax_count].set_title(self.model.layers[j].name)
+                axs[ax_count].legend()
+
+            n = len(self.loss_history)
+            k = min(100, n)
+            averaged_loss = np.convolve(self.loss_history, np.ones(k) / k, mode=&#39;same&#39;)
+
+            axs = subfigs[1].subplots(1, 2)
+            axs[0].semilogy(range(n), self.loss_history, &#39;k-&#39;, lw=0.5)
+            axs[0].semilogy(range(n), averaged_loss, &#39;r--&#39;, lw=1)
+            axs[0].set_title(&#39;Loss History&#39;)
+            axs[0].set_xlabel(&#39;Iteration&#39;)
+            axs[0].set_ylabel(&#39;Loss&#39;)
+            axs[0].set_xlim(0, n - (1 if n &gt; 1 else 0))
+
+            axs[1].plot(self.weight_history, &#39;k&#39;, lw=0.5)
+            axs[1].set_title(&#39;Weight History&#39;)
+            axs[1].set_xlabel(&#39;#Update&#39;)
+            axs[1].set_ylabel(&#39;Weight&#39;)
+            axs[1].set_xlim(0, len(self.weight_history) - 1)
+
+            figManager = plt.get_current_fig_manager()
+            figManager.window.state(&#34;zoomed&#34;)
+            
+            plt.show()
+
+        def adjust_weights(gradients):
+            pde_gradient = tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients[0]], axis=0)
+            data_gradient = tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients[1]], axis=0)
+            new_weight = tf.reduce_max(tf.abs(pde_gradient)) / (tf.reduce_mean(tf.abs(data_gradient)))
+            
+            result = None
+            for i, cond in enumerate(self.bvp.get_conditions()):
+                if cond.name != &#39;inner&#39;:
+                    result = 0.25 * self.weights[i] + 0.75 * new_weight
+                    self.weights[i].assign(result)
+                    
+            return result
 
         @tf.function
         def train_step():
-            # Compute current loss and gradient w.r.t. parameters
-            loss, grad_theta = get_grad()
+            if self.weights is None:
+                self.weights = tf.Variable(np.ones(len(self.bvp.get_conditions())), dtype=tf.float32)
+                
+            if self.step is None:
+                self.step = tf.Variable(0)
+            
+            loss, gradients = self.compute_gradients()
+            
+            if self.step % 10 == 0:
+                new_weight = adjust_weights(gradients)
+            else:
+                new_weight = -1.0
+                
+            optimizer.apply_gradients(zip(gradients[2], self.model.trainable_variables))
+            self.step.assign(self.step + 1)
+            
+            return loss, gradients, new_weight
 
-            # Perform gradient descent step
-            optimizer.apply_gradients(zip(grad_theta, self.model.trainable_variables))
-
-            return loss
-
-        t0 = time()
-        for i in range(iterations + 1):
-            loss = train_step()
+        pbar = tqdm(range(iterations), desc=&#39;Pending...&#39;)
+        for i in pbar:
+            loss, gradients, new_weight = train_step()
+            
             self.loss_history += [loss.numpy()]
+            
+            if new_weight != -1:
+                self.weight_history += [new_weight.numpy()]
+            
+            avgloss = np.mean(self.loss_history[-100:])
+            pbar.desc = &#39;øloss = {:10.8e} lr = {:.5f}&#39;.format(avgloss, lr_scheduler(i))
 
-            if i % 50 == 0:
-                print(&#39;\rIt {:05d}/{:05d}: loss = {:10.8e} lr = {:.5f}&#39;.format(i, iterations, loss, lr_scheduler(i)), end=&#34;&#34;)
-
-        self.time = time() - t0
-        print(&#39;\nComputation time: {:.1f} seconds&#39;.format(self.time))</code></pre>
+            if i % debug_frequency == 0 or i == iterations - 1:
+                debug(gradients)</code></pre>
 </details>
 <h3>Methods</h3>
 <dl>
+<dt id="PDESolver.Solver.Solver.compute_differentials"><code class="name flex">
+<span>def <span class="ident">compute_differentials</span></span>(<span>self, samplePoints)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Calculates the differentials of the model at the given points.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>model</code></strong> :&ensp;<code>neural network</code></dt>
+<dd>Model to calculate the differentials of</dd>
+<dt><strong><code>samplePoints</code></strong> :&ensp;<code>tensor</code></dt>
+<dd>Tensor of points to calculate the differentials at</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>gradient_dict</code></strong> :&ensp;<code>dict</code></dt>
+<dd>Dictionary containing the differentials of the model needed for the bvp at the given points</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def compute_differentials(self, samplePoints):
+    &#34;&#34;&#34;
+    Calculates the differentials of the model at the given points.
+
+    Parameters
+    -----------
+    model: neural network
+        Model to calculate the differentials of
+    samplePoints: tensor
+        Tensor of points to calculate the differentials at
+
+    Returns
+    -----------
+    gradient_dict: dict
+        Dictionary containing the differentials of the model needed for the bvp at the given points
+    &#34;&#34;&#34;
+
+    specs = self.bvp.get_specification()
+
+    component_funs = {component: lambda x: self.model(x)[:, i] 
+                      for i, component in enumerate(specs[&#34;components&#34;])}
+
+    gradient_dict = {}
+
+    with tf.GradientTape(persistent=True) as tape:
+        for i, variable in enumerate(specs[&#34;variables&#34;]):
+            gradient_dict[variable] = samplePoints[:, i:i + 1]
+            tape.watch(gradient_dict[variable])
+
+        watched = [gradient_dict[variable] for variable in specs[&#34;variables&#34;]]
+        for component in specs[&#34;components&#34;]:
+            output = component_funs[component](tf.stack(watched, axis=1))
+            gradient_dict[component] = tf.reshape(output, (-1, 1))
+
+        for differential in specs[&#34;differentials&#34;]:
+            component = differential.split(&#34;_&#34;)[0]
+            variables = differential.split(&#34;_&#34;)[1]
+
+            differential_head = component 
+            for i, variable in enumerate(variables):
+                if i == 0:
+                    differential_head_new = differential_head + &#34;_&#34; + variable
+                else:
+                    differential_head_new = differential_head + variable
+
+                if not differential_head_new in gradient_dict:
+                    gradient_dict[differential_head_new] = tape.gradient(gradient_dict[differential_head], gradient_dict[variable])
+                    differential_head = differential_head_new
+
+    return gradient_dict</code></pre>
+</details>
+</dd>
+<dt id="PDESolver.Solver.Solver.compute_gradients"><code class="name flex">
+<span>def <span class="ident">compute_gradients</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Gets the gradients of the neural network.</p>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>tuple</code></strong> :&ensp;<code>Tuple</code> of <code>gradients</code></dt>
+<dd>&nbsp;</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def compute_gradients(self):
+    &#34;&#34;&#34;
+    Gets the gradients of the neural network.
+
+    Returns
+    -----------
+    tuple: Tuple of gradients
+    &#34;&#34;&#34;
+
+    with tf.GradientTape(persistent=True) as tape:
+        tape.watch(self.model.trainable_variables)
+        pdeloss, dataloss = self.compute_losses()
+        totalloss = pdeloss + dataloss
+
+        pdegrad = tape.gradient(pdeloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
+        datagrad = tape.gradient(dataloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
+        totalgrad = tape.gradient(totalloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
+
+    return totalloss, (pdegrad, datagrad, totalgrad)</code></pre>
+</details>
+</dd>
+<dt id="PDESolver.Solver.Solver.compute_losses"><code class="name flex">
+<span>def <span class="ident">compute_losses</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Computes the losses for the neural network.</p>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>tuple</code></strong> :&ensp;<code>Tuple</code> of <code>losses for the PDE and data</code></dt>
+<dd>&nbsp;</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def compute_losses(self):
+    &#34;&#34;&#34;
+    Computes the losses for the neural network.
+    
+    Returns
+    -----------
+    tuple: Tuple of losses for the PDE and data
+    &#34;&#34;&#34;
+
+    criterion = tf.keras.losses.MeanSquaredError()
+    residuals = self.compute_residuals()
+
+    pdeloss = 0
+    dataloss = 0
+    for i, (name, residual) in enumerate(residuals.items()):
+        if name == &#39;inner&#39;:
+            pdeloss += self.weights[i] * criterion(residual, 0.0)
+        else:
+            dataloss += self.weights[i] * criterion(residual, 0.0)
+
+    return pdeloss, dataloss </code></pre>
+</details>
+</dd>
+<dt id="PDESolver.Solver.Solver.compute_residuals"><code class="name flex">
+<span>def <span class="ident">compute_residuals</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Gets the residuals for the boundary value problem.</p>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>dict</code></strong> :&ensp;<code>Dictionary</code> of <code>residuals</code> of <code>form {condition_name: residual}</code></dt>
+<dd>&nbsp;</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def compute_residuals(self):
+    &#34;&#34;&#34;
+    Gets the residuals for the boundary value problem.
+
+    Returns
+    -----------
+    dict: Dictionary of residuals of form {condition_name: residual}
+    &#34;&#34;&#34;
+
+    conditions = self.bvp.get_conditions()
+
+    residuals = {}
+    for condition in conditions:
+        samples = condition.sample_points()
+        Du = self.compute_differentials(samples)
+        residuals[condition.name] = condition.residue_fn(Du)
+
+    return residuals</code></pre>
+</details>
+</dd>
 <dt id="PDESolver.Solver.Solver.train"><code class="name flex">
-<span>def <span class="ident">train</span></span>(<span>self, optimizer, lr_scheduler, iterations=10000)</span>
+<span>def <span class="ident">train</span></span>(<span>self, optimizer, lr_scheduler, iterations=10000, debug_frequency=2500)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Trains the neural network to solve the boundary value problem.</p>
@@ -265,7 +888,7 @@ class Solver:
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def train(self, optimizer, lr_scheduler, iterations=10000):
+<pre><code class="python">def train(self, optimizer, lr_scheduler, iterations=10000, debug_frequency=2500):
     &#34;&#34;&#34;
     Trains the neural network to solve the boundary value problem.
 
@@ -279,46 +902,103 @@ class Solver:
         Number of iterations to train for
     &#34;&#34;&#34;
 
-    def compute_loss():
-        criterion = tf.keras.losses.Huber()
+    def debug(gradients):
+        fig = plt.figure(figsize=(16, 8), layout=&#39;compressed&#39;)
+        subfigs = fig.subfigures(2, 1, hspace=0)
 
-        loss = 0
-        for cond in self.bvp.conditions:
-            out = cond(self.model, self.bvp)
-            loss += cond.weight * criterion(out, 0)
+        axs = subfigs[0].subplots(1, len(self.model.layers) - 4)
+        subfigs[0].suptitle(&#39;Gradient Distributions&#39;)
 
-        return loss
+        ax_count = -1
+        for j in range(len(self.model.layers)):
+            if j in [0, 1, 3, 4]:
+                continue
+            else:
+                ax_count += 1
 
-    def get_grad():
-        with tf.GradientTape(persistent=True) as tape:
-            tape.watch(self.model.trainable_variables)
-            loss = compute_loss()
+            layer_gradient = lambda i: tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients[i][2*(j-2):2*(j-1)]], axis=0)
+            density = lambda i, x: gaussian_kde(layer_gradient(i).numpy())(x)
 
-        g = tape.gradient(loss, self.model.trainable_variables)
-        del tape
+            xs = np.linspace(-2.5, 2.5, 1000)
+            axs[ax_count].plot(xs, density(0, xs), &#39;orange&#39;, lw=0.5, label=&#39;PDE&#39;)
+            axs[ax_count].plot(xs, density(1, xs), &#39;b--&#39;, lw=0.5, label=&#39;Data&#39;)
 
-        return loss, g
+            axs[ax_count].set_xlim(min(xs), max(xs))
+            axs[ax_count].set_ylim(0, 100)
+            axs[ax_count].set_yscale(&#39;symlog&#39;)
+            axs[ax_count].set_title(self.model.layers[j].name)
+            axs[ax_count].legend()
+
+        n = len(self.loss_history)
+        k = min(100, n)
+        averaged_loss = np.convolve(self.loss_history, np.ones(k) / k, mode=&#39;same&#39;)
+
+        axs = subfigs[1].subplots(1, 2)
+        axs[0].semilogy(range(n), self.loss_history, &#39;k-&#39;, lw=0.5)
+        axs[0].semilogy(range(n), averaged_loss, &#39;r--&#39;, lw=1)
+        axs[0].set_title(&#39;Loss History&#39;)
+        axs[0].set_xlabel(&#39;Iteration&#39;)
+        axs[0].set_ylabel(&#39;Loss&#39;)
+        axs[0].set_xlim(0, n - (1 if n &gt; 1 else 0))
+
+        axs[1].plot(self.weight_history, &#39;k&#39;, lw=0.5)
+        axs[1].set_title(&#39;Weight History&#39;)
+        axs[1].set_xlabel(&#39;#Update&#39;)
+        axs[1].set_ylabel(&#39;Weight&#39;)
+        axs[1].set_xlim(0, len(self.weight_history) - 1)
+
+        figManager = plt.get_current_fig_manager()
+        figManager.window.state(&#34;zoomed&#34;)
+        
+        plt.show()
+
+    def adjust_weights(gradients):
+        pde_gradient = tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients[0]], axis=0)
+        data_gradient = tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients[1]], axis=0)
+        new_weight = tf.reduce_max(tf.abs(pde_gradient)) / (tf.reduce_mean(tf.abs(data_gradient)))
+        
+        result = None
+        for i, cond in enumerate(self.bvp.get_conditions()):
+            if cond.name != &#39;inner&#39;:
+                result = 0.25 * self.weights[i] + 0.75 * new_weight
+                self.weights[i].assign(result)
+                
+        return result
 
     @tf.function
     def train_step():
-        # Compute current loss and gradient w.r.t. parameters
-        loss, grad_theta = get_grad()
+        if self.weights is None:
+            self.weights = tf.Variable(np.ones(len(self.bvp.get_conditions())), dtype=tf.float32)
+            
+        if self.step is None:
+            self.step = tf.Variable(0)
+        
+        loss, gradients = self.compute_gradients()
+        
+        if self.step % 10 == 0:
+            new_weight = adjust_weights(gradients)
+        else:
+            new_weight = -1.0
+            
+        optimizer.apply_gradients(zip(gradients[2], self.model.trainable_variables))
+        self.step.assign(self.step + 1)
+        
+        return loss, gradients, new_weight
 
-        # Perform gradient descent step
-        optimizer.apply_gradients(zip(grad_theta, self.model.trainable_variables))
-
-        return loss
-
-    t0 = time()
-    for i in range(iterations + 1):
-        loss = train_step()
+    pbar = tqdm(range(iterations), desc=&#39;Pending...&#39;)
+    for i in pbar:
+        loss, gradients, new_weight = train_step()
+        
         self.loss_history += [loss.numpy()]
+        
+        if new_weight != -1:
+            self.weight_history += [new_weight.numpy()]
+        
+        avgloss = np.mean(self.loss_history[-100:])
+        pbar.desc = &#39;øloss = {:10.8e} lr = {:.5f}&#39;.format(avgloss, lr_scheduler(i))
 
-        if i % 50 == 0:
-            print(&#39;\rIt {:05d}/{:05d}: loss = {:10.8e} lr = {:.5f}&#39;.format(i, iterations, loss, lr_scheduler(i)), end=&#34;&#34;)
-
-    self.time = time() - t0
-    print(&#39;\nComputation time: {:.1f} seconds&#39;.format(self.time))</code></pre>
+        if i % debug_frequency == 0 or i == iterations - 1:
+            debug(gradients)</code></pre>
 </details>
 </dd>
 </dl>
@@ -342,6 +1022,10 @@ class Solver:
 <li>
 <h4><code><a title="PDESolver.Solver.Solver" href="#PDESolver.Solver.Solver">Solver</a></code></h4>
 <ul class="">
+<li><code><a title="PDESolver.Solver.Solver.compute_differentials" href="#PDESolver.Solver.Solver.compute_differentials">compute_differentials</a></code></li>
+<li><code><a title="PDESolver.Solver.Solver.compute_gradients" href="#PDESolver.Solver.Solver.compute_gradients">compute_gradients</a></code></li>
+<li><code><a title="PDESolver.Solver.Solver.compute_losses" href="#PDESolver.Solver.Solver.compute_losses">compute_losses</a></code></li>
+<li><code><a title="PDESolver.Solver.Solver.compute_residuals" href="#PDESolver.Solver.Solver.compute_residuals">compute_residuals</a></code></li>
 <li><code><a title="PDESolver.Solver.Solver.train" href="#PDESolver.Solver.Solver.train">train</a></code></li>
 </ul>
 </li>
