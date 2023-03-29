@@ -1,11 +1,12 @@
 from PDESolver import *
+from numpy import exp
 
 def u(t, x):
-    u0 = lambda _x: 1 / (200*(_x + 0.5)**2 + 1) + 1 / (200*(_x - 0.5)**2 + 2)
+    u0 = lambda _x: exp(-25 * _x**2) #1 / (200*(_x + 0.5)**2 + 1) + 1 / (200*(_x - 0.5)**2 + 2)
     return 0.5 * (u0(x - t) + u0(x + t))
 
 # Number of iterations
-N = 20000
+N = 10000
 
 # Initialize solver, learning rate scheduler and choose optimizer
 solver = Solver(WaveEquation1D(), num_hidden_layers=4, num_neurons_per_layer=50)

@@ -1,6 +1,5 @@
 from PDESolver import *
 
-
 # Number of iterations
 N = 40000
 
