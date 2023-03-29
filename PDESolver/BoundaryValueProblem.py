@@ -2,6 +2,37 @@ from PDESolver.Sampling import *
 import tensorflow as tf
 
 
+class Specification:
+    def __init__(self, components, variables, differentials):
+        """
+        Class for defining the specification of a boundary value problem.
+
+        Parameters
+        -----------
+        components: list
+            List of components of the boundary value problem
+        variables: list
+            List of variables of the boundary value problem
+        differentials: list
+            List of differentials of the boundary value problem
+        """
+
+        self.components = components
+        self.variables = variables
+        self.differentials = differentials
+
+    def as_dictionary(self):
+        """
+        Returns the specification as a dictionary.
+
+        Returns
+        -----------
+        dict: Specification of form {"components": [str], "variables": [str], "differentials": [str]}
+        """
+
+        return {"components": self.components, "variables": self.variables, "differentials": self.differentials}
+
+
 class Condition:
     def __init__(self, name, residue_fn, region_samples_pair, sampler=Random()):
         """
