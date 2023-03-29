@@ -64,7 +64,7 @@ class Solver:
 
         specs = self.bvp.get_specification()
 
-        component_funs = {component: lambda x: self.model(x)[:, i] 
+        component_funs = {component: lambda x, index=i: self.model(x)[:, index] 
                           for i, component in enumerate(specs["components"])}
 
         gradient_dict = {}

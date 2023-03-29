@@ -557,7 +557,9 @@ if __name__ == "__main__":
 
     samples = bvp_old.conditions[3].sample_points()
 
+    tf.random.set_seed(0)
     solver_new = Solver(bvp_new)
+    tf.random.set_seed(0)
     solver_old = Solver(bvp_old)
 
     Du_new = solver_new.compute_differentials(samples)
