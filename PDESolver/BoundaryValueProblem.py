@@ -195,42 +195,17 @@ class WaveEquation2D(BoundaryValueProblem):
         """
 
         super().__init__()
-        self.initial_u = Cuboid([0, -2, -2], [0, 2, 2])
-        self.inner = Cuboid([0, -2, -2], [2, 2, 2])
 
-    def get_conditions(self):
-        return [
+        self.conditions = [
             Condition("initial_u",
                       lambda Du: Du["u"] - tf.exp(-Du["x"] ** 2 - Du["y"] ** 2) ** 4,
-                      (self.initial_u, 512)),
+                      (Cuboid([0, -2, -2], [0, 2, 2]), 512)),
             Condition("inner",
                       lambda Du: Du["u_tt"] - Du["u_xx"] - Du["u_yy"],
-                      (self.inner, 512))
+                      (Cuboid([0, -2, -2], [2, 2, 2]), 512))
         ]
 
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        with tf.GradientTape(persistent=True) as tape:
-            t, x, y = freeVariables[:, 0:1], freeVariables[:, 1:2], freeVariables[:, 2:3]
-
-            tape.watch(t)
-            tape.watch(x)
-            tape.watch(y)
-
-            u = model(tf.stack([t[:, 0], x[:, 0], y[:, 0]], axis=1))
-
-            u_t = tape.gradient(u, t)
-            u_x = tape.gradient(u, x)
-            u_y = tape.gradient(u, y)
-
-            u_tt = tape.gradient(u_t, t)
-            u_xx = tape.gradient(u_x, x)
-            u_yy = tape.gradient(u_y, y)
-
-        del tape
-
-        return {"t": t, "x": x, "y": y, "u": u, "u_t": u_t, "u_x": u_x, "u_y": u_yy, "u_tt": u_tt, "u_xx": u_xx,
-                "u_yy": u_yy}
+        self.specification = Specification(["u"], ["t", "x", "y"], ["u_tt", "u_xx", "u_yy"])
 
 
 class HeatEquation1D(BoundaryValueProblem):
@@ -246,43 +221,20 @@ class HeatEquation1D(BoundaryValueProblem):
         """
 
         super().__init__()
-        self.initial = Cuboid([0, 0], [0, 1])
-        self.boundary = Union(Cuboid([0, 0], [1, 0]), Cuboid([0, 1], [1, 1]))
-        self.inner = Cuboid([0, 0], [1, 1])
 
-    def get_conditions(self):
-        return [
+        self.conditions = [
             Condition("initial",
                       lambda Du: Du["u"] - 8*Du["x"]**2 * (1 - Du["x"])**2,
-                      (self.initial, 100)),
+                      (Cuboid([0, 0], [0, 1]), 100)),
             Condition("boundary",
                       lambda Du: Du["u_x"],
-                      (self.boundary, 100)),
+                      (Cuboid([0, 0], [1, 0]) & Cuboid([0, 1], [1, 1]), 100)),
             Condition("inner",
                       lambda Du: Du["u_t"] - 0.125 * Du["u_xx"],
-                      (self.inner, 1600),
-                      Equidistant())
+                      (Cuboid([0, 0], [1, 1]), 1600))
         ]
 
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        with tf.GradientTape(persistent=True) as tape:
-            t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
-
-            tape.watch(t)
-            tape.watch(x)
-
-            ipt = tf.stack([t[:, 0], x[:, 0]], axis=1)
-            u = model(ipt)
-
-            u_t = tape.gradient(u, t)
-            u_x = tape.gradient(u, x)
-
-            u_xx = tape.gradient(u_x, x)
-
-        del tape
-
-        return {"t": t, "x": x, "u": u, "u_t": u_t, "u_x": u_x, "u_xx": u_xx}
+        self.specification = Specification(["u"], ["t", "x"], ["u_t", "u_xx"])
 
 
 class HeatEquation2D(BoundaryValueProblem):
@@ -298,40 +250,17 @@ class HeatEquation2D(BoundaryValueProblem):
         """
 
         super().__init__()
-        self.initial = Cuboid([0, -2, -2], [0, 2, 2])
-        self.inner = Cuboid([0, -2, -2], [2, 2, 2])
 
-    def get_conditions(self):
-        return [
+        self.conditions = [
             Condition("initial",
                       lambda Du: Du["u"] - tf.exp(-Du["x"] ** 2 - Du["y"] ** 2) ** 2,
-                      (self.initial, 400)),
+                      (Cuboid([0, -2, -2], [0, 2, 2]), 400)),
             Condition("inner",
                       lambda Du: Du["u_t"] - Du["u_xx"] - Du["u_yy"],
-                      (self.inner, 3600))
+                      (Cuboid([0, -2, -2], [2, 2, 2]), 3600))
         ]
 
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        with tf.GradientTape(persistent=True) as tape:
-            t, x, y = freeVariables[:, 0:1], freeVariables[:, 1:2], freeVariables[:, 2:3]
-
-            tape.watch(t)
-            tape.watch(x)
-            tape.watch(y)
-
-            u = model(tf.stack([t[:, 0], x[:, 0], y[:, 0]], axis=1))
-
-            u_t = tape.gradient(u, t)
-            u_x = tape.gradient(u, x)
-            u_y = tape.gradient(u, y)
-
-            u_xx = tape.gradient(u_x, x)
-            u_yy = tape.gradient(u_y, y)
-
-        del tape
-
-        return {"t": t, "x": x, "y": y, "u": u, "u_t": u_t, "u_x": u_x, "u_y": u_yy, "u_xx": u_xx, "u_yy": u_yy}
+        self.specification = Specification(["u"], ["t", "x", "y"], ["u_t", "u_xx", "u_yy"])
 
 
 class BurgersEquation(BoundaryValueProblem):
@@ -347,43 +276,21 @@ class BurgersEquation(BoundaryValueProblem):
         """
 
         super().__init__()
-        self.initial = Cuboid([0, -1], [0, 1])
-        self.boundary = Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1]))
-        self.inner = Cuboid([0, -1], [1, 1])
         self.viscosity = viscosity
 
-    def get_conditions(self):
-        return [
+        self.conditions = [
             Condition("initial",
                       lambda Du: Du["u"] + tf.sin(np.pi * Du["x"]),
-                      (self.initial, 512)),
+                      (Cuboid([0, -1], [0, 1]), 128)),
             Condition("boundary",
                       lambda Du: Du["u"],
-                      (self.boundary, 512)),
+                      (Cuboid([0, -1], [1, -1]) & Cuboid([0, 1], [1, 1]), 128)),
             Condition("inner",
-                      lambda Du: Du["u_t"] + Du["u"] * Du["u_x"] -
-                      self.viscosity / np.pi * Du["u_xx"],
-                      (self.inner, 512))
+                      lambda Du: Du["u_t"] + Du["u"] * Du["u_x"] - self.viscosity / np.pi * Du["u_xx"],
+                      (Cuboid([0, -1], [1, 1]), 128))
         ]
-
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        with tf.GradientTape(persistent=True) as tape:
-            t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
-
-            tape.watch(t)
-            tape.watch(x)
-
-            u = model(tf.stack([t[:, 0], x[:, 0]], axis=1))
-
-            u_t = tape.gradient(u, t)
-            u_x = tape.gradient(u, x)
-
-            u_xx = tape.gradient(u_x, x)
-
-        del tape
-
-        return {"t": t, "x": x, "u": u, "u_t": u_t, "u_x": u_x, "u_xx": u_xx}
+        
+        self.specification = Specification(["u"], ["t", "x"], ["u_t", "u_xx"])
 
 
 class VanDerPolEquation(BoundaryValueProblem):
@@ -399,44 +306,23 @@ class VanDerPolEquation(BoundaryValueProblem):
         """
 
         super().__init__()
-        self.initial = Cuboid([0, 0], [4, 0])
-        self.boundary = Cuboid([0, 0], [4, 0])
-        self.helper = Cuboid([0, 0], [0, 10])
-        self.inner = Cuboid([0, 0], [4, 10])
 
-    def conditions(self):
-        return [
+        self.conditions = [
             Condition("initial",
                       lambda Du: Du["u"] - 1,
-                      (self.initial, 200)),
+                      (Cuboid([0, 0], [4, 0]), 200)),
             Condition("boundary",
                       lambda Du: Du["u_x"],
-                      (self.boundary, 200)),
+                      (Cuboid([0, 0], [4, 0]), 200)),
             Condition("helper",
                       lambda Du: Du["u"] - tf.cos(Du["x"]),
-                      (self.helper, 200)),
+                      (Cuboid([0, 0], [0, 10]), 200)),
             Condition("inner",
                       lambda Du: Du["u_xx"] - Du["t"] * (1 - Du["u"] ** 2) * Du["u_x"] + Du["u"],
-                      (self.inner, 3000))
+                      (Cuboid([0, 0], [4, 10]), 3000))
         ]
-
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        with tf.GradientTape(persistent=True) as tape:
-            t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
-
-            tape.watch(t)
-            tape.watch(x)
-
-            u = model(tf.stack([t[:, 0], x[:, 0]], axis=1))
-
-            u_x = tape.gradient(u, x)
-
-            u_xx = tape.gradient(u_x, x)
-
-        del tape
-
-        return {"t": t, "x": x, "u": u, "u_x": u_x, "u_xx": u_xx}
+        
+        self.specification = Specification(["u"], ["t", "x"], ["u_xx"])
 
 
 class AllenCahnEquation(BoundaryValueProblem):
@@ -452,48 +338,26 @@ class AllenCahnEquation(BoundaryValueProblem):
         """
 
         super().__init__()
-        self.initial = Cuboid([0, -1], [0, 1])
-        self.boundary = Union(Cuboid([0, -1], [1, -1]), Cuboid([0, 1], [1, 1]))
-        self.center = Cuboid([0, 0], [1, 0])
-        self.inner = Cuboid([0, -1], [1, 1])
 
-    def get_conditions(self):
-        return [
+        self.conditions = [
             Condition("initial",
                       lambda Du: Du["u"] - Du["x"] ** 2 * tf.cos(np.pi * Du["x"]),
-                      (self.initial, 100)),
+                      (Cuboid([0, -1], [0, 1]), 100)),
             Condition("boundary1",
                       lambda Du: Du["u"] + 1,
-                      (self.boundary, 200)),
+                      (Cuboid([0, -1], [1, -1]) & Cuboid([0, 1], [1, 1]), 200)),
             Condition("boundary2",
                       lambda Du: Du["u_x"],
-                      (self.boundary, 200)),
+                      (Cuboid([0, -1], [1, -1]) & Cuboid([0, 1], [1, 1]), 200)),
             Condition("center",
                       lambda Du: Du["u"],
-                      (self.center, 100)),
+                      (Cuboid([0, 0], [1, 0]), 100)),
             Condition("inner",
                       lambda Du: Du["u_t"] - 0.0001 * Du["u_xx"] + 5 * (Du["u"] ** 3 - Du["u"]),
-                      (self.inner, 2500))
+                      (Cuboid([0, -1], [1, 1]), 2500))
         ]
 
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        with tf.GradientTape(persistent=True) as tape:
-            t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
-
-            tape.watch(t)
-            tape.watch(x)
-
-            u = model(tf.stack([t[:, 0], x[:, 0]], axis=1))
-
-            u_t = tape.gradient(u, t)
-            u_x = tape.gradient(u, x)
-
-            u_xx = tape.gradient(u_x, x)
-
-        del tape
-
-        return {"t": t, "x": x, "u": u, "u_t": u_t, "u_x": u_x, "u_xx": u_xx}
+        self.specification = Specification(["u"], ["t", "x"], ["u_t", "u_xx"])
 
 
 class KortewegDeVriesEquation(BoundaryValueProblem):
@@ -509,39 +373,17 @@ class KortewegDeVriesEquation(BoundaryValueProblem):
         """
 
         super().__init__()
-        self.initial = Cuboid([0, -1], [0, 1])
-        self.inner = Cuboid([0, -1], [1, 1])
 
-    def get_conditions(self):
-        return [
+        self.conditions = [
             Condition("initial",
                       lambda Du: Du["u"] - tf.cos(np.pi * Du["x"]),
-                      (self.initial, 500)),
+                      (Cuboid([0, -1], [0, 1]), 500)),
             Condition("inner",
                       lambda Du: Du["u_t"] + 6 * Du["u"] * Du["u_x"] + Du["u_xxx"],
-                      (self.inner, 2000))
+                      (Cuboid([0, -1], [1, 1]), 2000))
         ]
 
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        with tf.GradientTape(persistent=True) as tape:
-            t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
-
-            tape.watch(t)
-            tape.watch(x)
-
-            u = model(tf.stack([t[:, 0], x[:, 0]], axis=1))
-
-            u_t = tape.gradient(u, t)
-            u_x = tape.gradient(u, x)
-
-            u_xx = tape.gradient(u_x, x)
-
-            u_xxx = tape.gradient(u_xx, x)
-
-        del tape
-
-        return {"t": t, "x": x, "u": u, "u_t": u_t, "u_x": u_x, "u_xxx": u_xxx}
+        self.specification = Specification(["u"], ["t", "x"], ["u_t", "u_xxx"])
 
 
 class ConvectionDiffusionEquation(BoundaryValueProblem):
@@ -557,37 +399,17 @@ class ConvectionDiffusionEquation(BoundaryValueProblem):
         """
 
         super().__init__()
-        self.initital = Cuboid([0, -0.5], [0, 1])
-        self.inner = Cuboid([0, -0.5], [1, 1])
 
-    def get_conditions(self):
-        return [
+        self.conditions = [
             Condition("initial",
                       lambda Du: Du["u"] - tf.exp(-25 * Du["x"]**2),
-                      (self.initital, 100)),
+                      (Cuboid([0, -0.5], [0, 1]), 100)),
             Condition("inner",
                       lambda Du: Du["u_t"] + Du["u_x"] - 0.1 * Du["u_xx"],
-                      (self.inner, 1000))
+                      (Cuboid([0, -0.5], [1, 1]), 1000))
         ]
 
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        with tf.GradientTape(persistent=True) as tape:
-            t, x = freeVariables[:, 0:1], freeVariables[:, 1:2]
-
-            tape.watch(t)
-            tape.watch(x)
-
-            u = model(tf.stack([t[:, 0], x[:, 0]], axis=1))
-
-            u_t = tape.gradient(u, t)
-            u_x = tape.gradient(u, x)
-
-            u_xx = tape.gradient(u_x, x)
-
-        del tape
-
-        return {"t": t, "x": x, "u": u, "u_t": u_t, "u_x": u_x, "u_xx": u_xx}
+        self.specification = Specification(["u"], ["t", "x"], ["u_t", "u_xx"])
 
 
 class MinimalSurfaceEquation(BoundaryValueProblem):
@@ -603,45 +425,20 @@ class MinimalSurfaceEquation(BoundaryValueProblem):
         """
 
         super().__init__()
-        self.boundary1 = Cuboid([0, -1], [0, 1])
-        self.boundary2 = Cuboid([1, -1], [1, 1])
-        self.inner = Cuboid([0, -1], [1, 1])
-
-    def get_conditions(self):
-        return [
+        self.conditions = [
             Condition("boundary1",
                       lambda Du: Du["u"] - Du["x"],
-                      (self.boundary1, 50)),
+                      (Cuboid([0, -1], [0, 1]), 50)),
             Condition("boundary2",
                       lambda Du: Du["u"] + Du["x"],
-                      (self.boundary2, 50)),
+                      (Cuboid([1, -1], [1, 1]), 50)),
             Condition("inner",
                       lambda Du: (1 + Du["u_x"] ** 2) * Du["u_yy"] - 2 * Du["u_y"] * Du["u_x"] * Du["u_xy"] + (
                               1 + Du["u_y"] ** 2) * Du["u_xx"],
-                      (self.inner, 500))
+                      (Cuboid([0, -1], [1, 1]), 500))
         ]
 
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        with tf.GradientTape(persistent=True) as tape:
-            x, y = freeVariables[:, 0:1], freeVariables[:, 1:2]
-
-            tape.watch(x)
-            tape.watch(y)
-
-            u = model(tf.stack([x[:, 0], y[:, 0]], axis=1))
-
-            u_x = tape.gradient(u, x)
-            u_y = tape.gradient(u, y)
-
-            u_xy = tape.gradient(u_x, y)
-
-            u_xx = tape.gradient(u_x, x)
-            u_yy = tape.gradient(u_y, y)
-
-        del tape
-
-        return {"x": x, "y": y, "u": u, "u_x": u_x, "u_y": u_y, "u_xy": u_xy, "u_xx": u_xx, "u_yy": u_yy}
+        self.specification = Specification(["u"], ["x", "y"], ["u_xx", "u_yy", "u_xy"])
 
 
 class Pendulum(BoundaryValueProblem):
@@ -657,73 +454,123 @@ class Pendulum(BoundaryValueProblem):
         """
 
         super().__init__()
-        self.initialPos = Cuboid([0], [0])
-        self.initialVel = Cuboid([0], [0])
-        self.inner = Cuboid([0], [10])
-        self.constraint = Cuboid([0], [10])
 
-    def get_conditions(self):
-        def initPos(t):
-            return tf.concat([0 * t + 1, 0 * t], axis=1)
+        stack = lambda *tensors: tf.concat(tensors, axis=1)
 
-        def initVel(t):
-            return tf.concat([0 * t + 0, 0 * t + 0], axis=1)
+        initPos = lambda t: tf.concat([0 * t + 1, 0 * t + 0], axis=1)
+        initVel = lambda t: tf.concat([0 * t + 0, 0 * t + 0], axis=1)
+        ode = lambda u, t, alpha: -alpha * u - tf.concat([0 * t + 0, 0 * t + 1.5], axis=1)
 
-        def ode(u, t, alpha):
-            return -alpha * u - tf.concat([0 * t, 0 * t + 1.5], axis=1)
-
-        return [
+        self.conditions = [
             Condition("initialPos",
-                      lambda Du: Du["u"] - initPos(Du["t"]),
-                      (self.initialPos, 128)),
+                      lambda Du: stack(Du["x"], Du["y"]) - initPos(Du["t"]),
+                      (Cuboid([0], [0]), 128)),
             Condition("initialVel",
-                      lambda Du: Du["u_t"] - initVel(Du["t"]),
-                      (self.initialVel, 128)),
+                      lambda Du: stack(Du["x_t"], Du["y_t"]) - initVel(Du["t"]),
+                      (Cuboid([0], [0]), 128)),
             Condition("inner",
-                      lambda Du: Du["u_tt"] - ode(Du["u"], Du["t"], Du["alpha"]),
-                      (self.inner, 128)),
+                      lambda Du: stack(Du["x_tt"], Du["y_tt"]) - ode(stack(Du["x"], Du["y"]), Du["t"], Du["lagrange"]),
+                      (Cuboid([0], [10]), 128)),
             Condition("constraint",
-                      lambda Du: tf.norm(Du["u"], axis=1)**2 - 1.,
-                      (self.constraint, 128))
+                      lambda Du: tf.norm(stack(Du["x"], Du["y"]), axis=1)**2 - 1.,
+                      (Cuboid([0], [10]), 128))
         ]
-    
-    def get_specification(self):
-        return {
-            "components": ["x", "y", "lagrange"],
-            "variables": ["t"],
-            "differentials": ["x_tt", "y_tt", "lagrange_tt"],
-        }
 
-    @staticmethod
-    def calculate_differentials(model, freeVariables):
-        def u1(x):
-            return model(x)[:, 0]
+        self.specification = Specification(["x", "y", "lagrange"], ["t"], ["x_tt", "y_tt"])
 
-        def u2(x):
-            return model(x)[:, 1]
 
-        def lagrange(x):
-            return model(x)[:, 2]
+if __name__ == "__main__":
+    from PDESolver import *
 
-        with tf.GradientTape(persistent=True) as tape:
-            t = freeVariables[:, 0:1]
+    class OldPendulum(BoundaryValueProblem):
+        """
+        Class defining the differential algebraic equation for a pendulum.
 
-            tape.watch(t)
+        t ⟼ (x_1, x_2, lambda)
+        """
 
-            ux = u1(t)
-            uy = u2(t)
-            alpha = tf.transpose(tf.stack([lagrange(t)]))
+        def __init__(self):
+            """
+            Constructor for a pendulum.
+            """
 
-            ux_t = tape.gradient(ux, t)
-            uy_t = tape.gradient(uy, t)
+            super().__init__()
 
-            ux_tt = tape.gradient(ux_t, t)
-            uy_tt = tape.gradient(uy_t, t)
+            initPos = lambda t: tf.concat([0 * t + 1, 0 * t + 0], axis=1)
+            initVel = lambda t: tf.concat([0 * t + 0, 0 * t + 0], axis=1)
+            ode = lambda u, t, alpha: -alpha * u - tf.concat([0 * t + 0, 0 * t + 1.5], axis=1)
 
-            u = tf.stack([ux, uy], axis=1)
-            u_t = tf.concat([ux_t, uy_t], axis=1)
-            u_tt = tf.concat([ux_tt, uy_tt], axis=1)
+            self.conditions = [
+                Condition("initialPos",
+                        lambda Du: Du["u"] - initPos(Du["t"]),
+                        (Cuboid([0], [0]), 5)),
+                Condition("initialVel",
+                        lambda Du: Du["u_t"] - initVel(Du["t"]),
+                        (Cuboid([0], [0]), 5)),
+                Condition("inner",
+                        lambda Du: Du["u_tt"] - ode(Du["u"], Du["t"], Du["alpha"]),
+                        (Cuboid([0], [10]), 5)),
+                Condition("constraint",
+                        lambda Du: tf.norm(Du["u"], axis=1)**2 - 1.,
+                        (Cuboid([0], [10]), 5))
+            ]
 
-        del tape
+            self.specification = Specification(["x", "y", "lagrange"], ["t"], ["x_tt", "y_tt"])
 
-        return {"t": t, "u": u, "u_t": u_t, "u_tt": u_tt, "alpha": alpha}
+        @staticmethod
+        def calculate_differentials(model, freeVariables):
+            def u1(x):
+                return model(x)[:, 0]
+
+            def u2(x):
+                return model(x)[:, 1]
+
+            def lagrange(x):
+                return model(x)[:, 2]
+
+            with tf.GradientTape(persistent=True) as tape:
+                t = freeVariables[:, 0:1]
+
+                tape.watch(t)
+
+                ux = u1(t)
+                uy = u2(t)
+                alpha = tf.transpose(tf.stack([lagrange(t)]))
+
+                ux_t = tape.gradient(ux, t)
+                uy_t = tape.gradient(uy, t)
+
+                ux_tt = tape.gradient(ux_t, t)
+                uy_tt = tape.gradient(uy_t, t)
+
+                u = tf.stack([ux, uy], axis=1)
+                u_t = tf.concat([ux_t, uy_t], axis=1)
+                u_tt = tf.concat([ux_tt, uy_tt], axis=1)
+
+            del tape
+
+            return {"t": t, "u": u, "u_t": u_t, "u_tt": u_tt, "alpha": alpha}
+
+    stack = lambda *tensors: tf.concat(tensors, axis=1)
+    bvp_new = Pendulum()
+    bvp_old = OldPendulum()
+
+    samples = bvp_old.conditions[3].sample_points()
+
+    solver_new = Solver(bvp_new)
+    solver_old = Solver(bvp_old)
+
+    Du_new = solver_new.compute_differentials(samples)
+    Du_old = bvp_old.calculate_differentials(solver_old.model, samples)
+
+    innerres_new = bvp_new.conditions[2].residue_fn
+    innerres_old = bvp_old.conditions[2].residue_fn
+
+    residue_new = innerres_new(Du_new)
+    residue_old = innerres_old(Du_old)
+
+    print("Output difference (u): ", tf.abs(Du_old["u"] - stack(Du_new["x"], Du_new["y"])), "\n")
+    print("Output difference (u_t): ", tf.abs(Du_old["u_t"] - stack(Du_new["x_t"], Du_new["y_t"])), "\n")
+    print("Output difference (u_tt): ", tf.abs(Du_old["u_tt"] - stack(Du_new["x_tt"], Du_new["y_tt"])), "\n")
+    print("Lagrange difference: ", tf.abs(Du_old["alpha"] - Du_new["lagrange"]), "\n")
+    print("Residue difference: ", tf.abs(residue_old - residue_new), "\n")
