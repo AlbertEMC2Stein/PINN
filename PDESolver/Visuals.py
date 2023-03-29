@@ -312,7 +312,7 @@ def plot_phaseplot(solver):
         anim = FuncAnimation(fig, update, frames=np.arange(len(tspace)),
                             init_func=init, blit=True, interval=16)
 
-        #anim.save("../out/%s_solution.gif" % solver.bvp.__class__.__name__, fps=60)
+        anim.save("../out/%s_solution.gif" % solver.bvp.__class__.__name__, fps=60)
         plt.show()
 
     _outFolderExists()
