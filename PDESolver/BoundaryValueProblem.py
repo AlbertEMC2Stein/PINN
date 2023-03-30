@@ -456,28 +456,27 @@ class Pendulum(BoundaryValueProblem):
 
         super().__init__()
 
-        stack = lambda *tensors: tf.concat(tensors, axis=1)
-
         initPos = lambda t: tf.concat([0 * t + 1, 0 * t + 0], axis=1)
         initVel = lambda t: tf.concat([0 * t + 0, 0 * t + 0], axis=1)
         ode = lambda u, t, alpha: -alpha * u - tf.concat([0 * t + 0, 0 * t + 1.5], axis=1)
 
         self.conditions = [
             Condition("initialPos",
-                      lambda Du: stack(Du["x"], Du["y"]) - initPos(Du["t"]),
-                      (Cuboid([0], [0]), 128)),
+                      lambda Du: Du["u"] - initPos(Du["t"]),
+                      (Cuboid([0], [0]), 512)),
             Condition("initialVel",
-                      lambda Du: stack(Du["x_t"], Du["y_t"]) - initVel(Du["t"]),
-                      (Cuboid([0], [0]), 128)),
+                      lambda Du: Du["u_t"] - initVel(Du["t"]),
+                      (Cuboid([0], [0]), 512)),
             Condition("inner",
-                      lambda Du: stack(Du["x_tt"], Du["y_tt"]) - ode(stack(Du["x"], Du["y"]), Du["t"], Du["lagrange"]),
-                      (Cuboid([0], [10]), 128)),
+                      lambda Du: Du["u_tt"] - ode(Du["u"], Du["t"], Du["lagrange"]),
+                      (Cuboid([0], [10]), 512)),
             Condition("constraint",
-                      lambda Du: tf.norm(stack(Du["x"], Du["y"]), axis=1)**2 - 1.,
-                      (Cuboid([0], [10]), 128))
+                      lambda Du: tf.reshape(tf.norm(Du["u"], axis=1), (-1, 1))**2 - 1.,
+                      (Cuboid([0], [10]), 512))
         ]
 
-        self.specification = Specification(["x", "y", "lagrange"], ["t"], ["x_tt", "y_tt"])
+        self.specification = Specification(["x", "y", "lagrange"], ["t"], ["x_tt", "y_tt"], 
+                                           {"u": ["x", "y"], "u_t": ["x_t", "y_t"], "u_tt": ["x_tt", "y_tt"]})
 
 
 if __name__ == "__main__":
