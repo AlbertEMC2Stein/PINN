@@ -512,7 +512,7 @@ if __name__ == "__main__":
                         lambda Du: Du["u_tt"] - ode(Du["u"], Du["t"], Du["alpha"]),
                         (Cuboid([0], [10]), 5)),
                 Condition("constraint",
-                        lambda Du: tf.norm(Du["u"], axis=1)**2 - 1.,
+                        lambda Du: tf.reshape(tf.norm(Du["u"], axis=1), (-1, 1))**2 - 1.,
                         (Cuboid([0], [10]), 5))
             ]
 
@@ -552,28 +552,48 @@ if __name__ == "__main__":
 
             return {"t": t, "u": u, "u_t": u_t, "u_tt": u_tt, "alpha": alpha}
 
-    stack = lambda *tensors: tf.concat(tensors, axis=1)
     bvp_new = Pendulum()
     bvp_old = OldPendulum()
-
-    samples = bvp_old.conditions[3].sample_points()
 
     tf.random.set_seed(0)
     solver_new = Solver(bvp_new)
     tf.random.set_seed(0)
     solver_old = Solver(bvp_old)
 
-    Du_new = solver_new.compute_differentials(samples)
-    Du_old = bvp_old.calculate_differentials(solver_old.model, samples)
+    criterion = tf.keras.losses.MeanSquaredError()
 
-    innerres_new = bvp_new.conditions[2].residue_fn
-    innerres_old = bvp_old.conditions[2].residue_fn
+    tf.random.set_seed(0)
+    residuals_new = solver_new.compute_residuals()
+    tf.random.set_seed(0)
+    gradients_new = solver_new.compute_gradients()[1][2]
+    tf.random.set_seed(0)
+    with tf.GradientTape(persistent=True) as tape:
+        tape.watch(solver_old.model.trainable_variables)
+        
+        residuals_old = {}
+        for condition in solver_old.bvp.get_conditions():
+            samples = condition.sample_points()
+            Du = bvp_old.calculate_differentials(solver_old.model, samples)
+            residuals_old[condition.name] = condition.residue_fn(Du)
 
-    residue_new = innerres_new(Du_new)
-    residue_old = innerres_old(Du_old)
+        pdeloss = 0
+        dataloss = 0
+        for i, (name, residual) in enumerate(residuals_old.items()):
+            if name == 'inner':
+                pdeloss += criterion(residual, 0.0)
+            else:
+                dataloss += criterion(residual, 0.0)
 
-    print("Output difference (u): ", tf.abs(Du_old["u"] - stack(Du_new["x"], Du_new["y"])), "\n")
-    print("Output difference (u_t): ", tf.abs(Du_old["u_t"] - stack(Du_new["x_t"], Du_new["y_t"])), "\n")
-    print("Output difference (u_tt): ", tf.abs(Du_old["u_tt"] - stack(Du_new["x_tt"], Du_new["y_tt"])), "\n")
-    print("Lagrange difference: ", tf.abs(Du_old["alpha"] - Du_new["lagrange"]), "\n")
-    print("Residue difference: ", tf.abs(residue_old - residue_new), "\n")
+        loss_new = sum(solver_new.compute_losses())
+        totalloss = pdeloss + dataloss
+        loss_old = totalloss
+        totalgrad = tape.gradient(totalloss, solver_old.model.trainable_variables, 
+                                  unconnected_gradients=tf.UnconnectedGradients.ZERO)
+
+    for (name, residual) in residuals_old.items():
+        print("Residual difference ({}): ".format(name), tf.norm(tf.abs(residuals_new[name] - residual)).numpy())
+
+    print("\nLoss difference: ", tf.abs(loss_old - loss_new).numpy(), "\n")
+
+    for i, (grad_new, grad_old) in enumerate(zip(gradients_new, totalgrad)):
+        print("Gradient difference ({}): ".format(i), tf.norm(tf.abs(grad_new - grad_old)).numpy())
