@@ -3,7 +3,7 @@ import tensorflow as tf
 
 
 class Specification:
-    def __init__(self, components, variables, differentials):
+    def __init__(self, components, variables, differentials, stacked_components={}):
         """
         Class for defining the specification of a boundary value problem.
 
@@ -20,6 +20,7 @@ class Specification:
         self.components = components
         self.variables = variables
         self.differentials = differentials
+        self.stacked_components = stacked_components
 
     def as_dictionary(self):
         """
@@ -27,10 +28,10 @@ class Specification:
 
         Returns
         -----------
-        dict: Specification of form {"components": [str], "variables": [str], "differentials": [str]}
+        dict: Specification of form {"components": [str], "variables": [str], "differentials": [str], "stacked_components": {str: [str]}
         """
 
-        return {"components": self.components, "variables": self.variables, "differentials": self.differentials}
+        return {"components": self.components, "variables": self.variables, "differentials": self.differentials, "stacked_components": self.stacked_components}
 
 
 class Condition:
