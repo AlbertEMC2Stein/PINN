@@ -64,6 +64,7 @@ class Solver:
 
         specs = self.bvp.get_specification()
 
+        stack = lambda *tensors: tf.concat(tensors, axis=1)
         component_funs = {component: lambda x, index=i: self.model(x)[:, index] 
                           for i, component in enumerate(specs["components"])}
 
@@ -93,6 +94,10 @@ class Solver:
                     if not differential_head_new in gradient_dict:
                         gradient_dict[differential_head_new] = tape.gradient(gradient_dict[differential_head], gradient_dict[variable])
                         differential_head = differential_head_new
+
+        for (stacked_component_name, components) in specs["stacked_components"].items():
+            stacked = stack(*[gradient_dict[component] for component in components])
+            gradient_dict[stacked_component_name] = stacked
 
         return gradient_dict
    
