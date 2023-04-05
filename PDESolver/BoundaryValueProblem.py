@@ -378,10 +378,10 @@ class KortewegDeVriesEquation(BoundaryValueProblem):
         self.conditions = [
             Condition("initial",
                       lambda Du: Du["u"] - tf.cos(np.pi * Du["x"]),
-                      (Cuboid([0, -1], [0, 1]), 500)),
+                      (Cuboid([0, -1], [0, 1]), 128)),
             Condition("inner",
                       lambda Du: Du["u_t"] + 6 * Du["u"] * Du["u_x"] + Du["u_xxx"],
-                      (Cuboid([0, -1], [1, 1]), 2000))
+                      (Cuboid([0, -1], [1, 1]), 128))
         ]
 
         self.specification = Specification(["u"], ["t", "x"], ["u_t", "u_xxx"])
@@ -449,7 +449,7 @@ class Pendulum(BoundaryValueProblem):
     t ⟼ (x_1, x_2, lambda)
     """
 
-    def __init__(self):
+    def __init__(self, t_start=0, t_end=2, mini_batch=128):
         """
         Constructor for a pendulum.
         """
@@ -463,16 +463,16 @@ class Pendulum(BoundaryValueProblem):
         self.conditions = [
             Condition("initialPos",
                       lambda Du: Du["u"] - initPos(Du["t"]),
-                      (Cuboid([0], [0]), 512)),
+                      (Cuboid([t_start], [t_start]), mini_batch)),
             Condition("initialVel",
                       lambda Du: Du["u_t"] - initVel(Du["t"]),
-                      (Cuboid([0], [0]), 512)),
+                      (Cuboid([t_start], [t_start]), mini_batch)),
             Condition("inner",
                       lambda Du: Du["u_tt"] - ode(Du["u"], Du["t"], Du["lagrange"]),
-                      (Cuboid([0], [10]), 512)),
+                      (Cuboid([t_start], [t_end]), mini_batch)),
             Condition("constraint",
                       lambda Du: tf.reshape(tf.norm(Du["u"], axis=1), (-1, 1))**2 - 1.,
-                      (Cuboid([0], [10]), 512))
+                      (Cuboid([t_start], [t_end]), mini_batch))
         ]
 
         self.specification = Specification(["x", "y", "lagrange"], ["t"], ["x_tt", "y_tt"], 
