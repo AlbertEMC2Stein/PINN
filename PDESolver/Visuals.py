@@ -273,7 +273,7 @@ def plot_2Dvectorfield(solver):
     animate_solution()
 
 
-def plot_phaseplot(solver):
+def plot_phaseplot(solver, t_start=0, t_end=2, N=500):
     """
     Plots the solution of a DAE defined in one temporal dimension and two spacial outputs.
 
@@ -286,7 +286,7 @@ def plot_phaseplot(solver):
     def animate_solution():
         fig, ax = plt.subplots(figsize=(5, 5))
 
-        tspace = tf.linspace([0], [10], 600, axis=0)
+        tspace = tf.linspace([t_start], [t_end], N, axis=0)
         xy = solver.model(tspace)
         xd, yd = xy[:, 0].numpy(), xy[:, 1].numpy()
         pendulum, = plt.plot([], [], 'lightgray')
@@ -305,7 +305,7 @@ def plot_phaseplot(solver):
             pendulum.set_data([0, xd[frame]], [0, yd[frame]])
             ln.set_data(xd[start:frame+1], yd[start:frame+1])
             sc.set_data(xd[frame], yd[frame])
-            title.set_text(u"t = {:.3f}".format(10 * frame / 600))
+            title.set_text(u"t = {:.3f}".format(t_start + (t_end - t_start) * frame / N))
 
             return ln, sc, pendulum, title
 
