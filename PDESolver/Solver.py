@@ -283,7 +283,7 @@ class Solver:
             avg_loss = np.mean(self.loss_history[-100:])
             pbar.desc = f'øloss = {avg_loss:.3e} (best: {best_loss:.3e}, {iterations_since_last_improvement:0{k_max}d}it ago) lr = {lr_scheduler(i):.5f}'
 
-            if i % debug_frequency == 0 or i == iterations - 1:
+            if debug_frequency > 0 and (i % debug_frequency == 0 or i == iterations - 1):
                 debug(gradients)
 
 
