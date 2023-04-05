@@ -162,6 +162,54 @@ class Solver:
 
         return totalloss, (pdegrad, datagrad, totalgrad)
 
+    def adjust_weights(self, gradients):
+        """
+        Adjusts the weights of the PDE and data losses.
+
+        Parameters
+        -----------
+        gradients: tuple
+            Tuple of gradients of the PDE and data losses obtained from compute_gradients
+        """
+
+        pde_gradient = tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients[0]], axis=0)
+        data_gradient = tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients[1]], axis=0)
+        new_weight = tf.reduce_max(tf.abs(pde_gradient)) / (tf.reduce_mean(tf.abs(data_gradient)))
+        
+        result = None
+        for i, cond in enumerate(self.bvp.get_conditions()):
+            if cond.name != 'inner':
+                result = 0.25 * self.weights[i] + 0.75 * new_weight
+                self.weights[i].assign(result)
+                
+        return result
+    
+    def train_step(self, optimizer):
+        """
+        Performs a single training step.
+
+        Parameters
+        -----------
+        optimizer: optimizer
+            Optimizer to use for training
+        """
+
+        if self.step is None:
+            self.step = tf.Variable(0)
+            self.weights = tf.Variable(np.ones(len(self.bvp.get_conditions())), dtype=tf.float32)
+        
+        loss, gradients = self.compute_gradients()
+        
+        if self.step % 10 == 0:
+            new_weight = self.adjust_weights(gradients)
+        else:
+            new_weight = -1.0
+            
+        optimizer.apply_gradients(zip(gradients[2], self.model.trainable_variables))
+        self.step.assign(self.step + 1)
+        
+        return loss, gradients, new_weight
+
     def train(self, optimizer, lr_scheduler, iterations=10000, debug_frequency=2500):
         """
         Trains the neural network to solve the boundary value problem.
@@ -176,95 +224,12 @@ class Solver:
             Number of iterations to train for
         """
 
-        def debug(gradients):
-            fig = plt.figure(figsize=(16, 8), layout='compressed')
-            subfigs = fig.subfigures(2, 1, hspace=0)
-
-            axs = subfigs[0].subplots(1, len(self.model.layers) - 4)
-            subfigs[0].suptitle('Gradient Distributions')
-
-            ax_count = -1
-            for j in range(len(self.model.layers)):
-                if j in [0, 1, 3, 4]:
-                    continue
-                else:
-                    ax_count += 1
-
-                layer_gradient = lambda i: tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients[i][2*(j-2):2*(j-1)]], axis=0)
-                density = lambda i, x: gaussian_kde(layer_gradient(i).numpy())(x)
-
-                xs = np.linspace(-2.5, 2.5, 1000)
-                axs[ax_count].plot(xs, density(0, xs), 'orange', lw=0.5, label='PDE')
-                axs[ax_count].plot(xs, density(1, xs), 'b--', lw=0.5, label='Data')
-
-                axs[ax_count].set_xlim(min(xs), max(xs))
-                axs[ax_count].set_ylim(0, 100)
-                axs[ax_count].set_yscale('symlog')
-                axs[ax_count].set_title(self.model.layers[j].name)
-                axs[ax_count].legend()
-
-            n = len(self.loss_history)
-            k = min(100, n)
-            averaged_loss = np.convolve(self.loss_history, np.ones(k) / k, mode='same')
-            best_loss = np.min(self.loss_history)
-
-            axs = subfigs[1].subplots(1, 2)
-            axs[0].semilogy(range(n), self.loss_history, 'k-', lw=0.5)
-            axs[0].semilogy(range(n), averaged_loss, 'r--', lw=1)
-            axs[0].axhline(best_loss, color='g', lw=0.5)
-            axs[0].set_title('Loss History')
-            axs[0].set_xlabel('Iteration')
-            axs[0].set_ylabel('Loss')
-            axs[0].set_xlim(0, n - (1 if n > 1 else 0))
-
-            axs[1].plot(self.weight_history, 'k', lw=0.5)
-            axs[1].set_title('Weight History')
-            axs[1].set_xlabel('#Update')
-            axs[1].set_ylabel('Weight')
-            axs[1].set_xlim(0, len(self.weight_history) - 1)
-
-            figManager = plt.get_current_fig_manager()
-            figManager.window.state("zoomed")
-            
-            plt.show()
-
-        def adjust_weights(gradients):
-            pde_gradient = tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients[0]], axis=0)
-            data_gradient = tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients[1]], axis=0)
-            new_weight = tf.reduce_max(tf.abs(pde_gradient)) / (tf.reduce_mean(tf.abs(data_gradient)))
-            
-            result = None
-            for i, cond in enumerate(self.bvp.get_conditions()):
-                if cond.name != 'inner':
-                    result = 0.25 * self.weights[i] + 0.75 * new_weight
-                    self.weights[i].assign(result)
-                    
-            return result
-
-        @tf.function
-        def train_step():
-            if self.weights is None:
-                self.weights = tf.Variable(np.ones(len(self.bvp.get_conditions())), dtype=tf.float32)
-                
-            if self.step is None:
-                self.step = tf.Variable(0)
-            
-            loss, gradients = self.compute_gradients()
-            
-            if self.step % 10 == 0:
-                new_weight = adjust_weights(gradients)
-            else:
-                new_weight = -1.0
-                
-            optimizer.apply_gradients(zip(gradients[2], self.model.trainable_variables))
-            self.step.assign(self.step + 1)
-            
-            return loss, gradients, new_weight
-
         best_loss = np.inf
         iterations_since_last_improvement = 0
         k_max = int(np.ceil(np.log10(iterations))) + 1
         pbar = tqdm(range(iterations), desc='Pending...')
+
+        train_step = tf.function(lambda: self.train_step(optimizer))
 
         for i in pbar:
             loss, gradients, new_weight = train_step()
@@ -284,7 +249,68 @@ class Solver:
             pbar.desc = f'øloss = {avg_loss:.3e} (best: {best_loss:.3e}, {iterations_since_last_improvement:0{k_max}d}it ago) lr = {lr_scheduler(i):.5f}'
 
             if debug_frequency > 0 and (i % debug_frequency == 0 or i == iterations - 1):
-                debug(gradients)
+                self.show_debugplot(gradients)
+
+    def show_debugplot(self, gradients):
+        """
+        Shows a debug plot of the neural network.
+
+        Parameters
+        -----------
+        gradients: tuple
+            Tuple of gradients of the PDE and data losses obtained from compute_gradients
+        """
+
+        fig = plt.figure(figsize=(16, 8), layout='compressed')
+        subfigs = fig.subfigures(2, 1, hspace=0)
+
+        axs = subfigs[0].subplots(1, len(self.model.layers) - 4)
+        subfigs[0].suptitle('Gradient Distributions')
+
+        ax_count = -1
+        for j in range(len(self.model.layers)):
+            if j in [0, 1, 3, 4]:
+                continue
+            else:
+                ax_count += 1
+
+            layer_gradient = lambda i: tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients[i][2*(j-2):2*(j-1)]], axis=0)
+            density = lambda i, x: gaussian_kde(layer_gradient(i).numpy())(x)
+
+            xs = np.linspace(-2.5, 2.5, 1000)
+            axs[ax_count].plot(xs, density(0, xs), 'orange', lw=0.5, label='PDE')
+            axs[ax_count].plot(xs, density(1, xs), 'b--', lw=0.5, label='Data')
+
+            axs[ax_count].set_xlim(min(xs), max(xs))
+            axs[ax_count].set_ylim(0, 100)
+            axs[ax_count].set_yscale('symlog')
+            axs[ax_count].set_title(self.model.layers[j].name)
+            axs[ax_count].legend()
+
+        n = len(self.loss_history)
+        k = min(100, n)
+        averaged_loss = np.convolve(self.loss_history, np.ones(k) / k, mode='same')
+        best_loss = np.min(self.loss_history)
+
+        axs = subfigs[1].subplots(1, 2)
+        axs[0].semilogy(range(n), self.loss_history, 'k-', lw=0.5)
+        axs[0].semilogy(range(n), averaged_loss, 'r--', lw=1)
+        axs[0].axhline(best_loss, color='g', lw=0.5)
+        axs[0].set_title('Loss History')
+        axs[0].set_xlabel('Iteration')
+        axs[0].set_ylabel('Loss')
+        axs[0].set_xlim(0, n - (1 if n > 1 else 0))
+
+        axs[1].plot(self.weight_history, 'k', lw=0.5)
+        axs[1].set_title('Weight History')
+        axs[1].set_xlabel('#Update')
+        axs[1].set_ylabel('Weight')
+        axs[1].set_xlim(0, len(self.weight_history) - 1)
+
+        figManager = plt.get_current_fig_manager()
+        figManager.window.state("zoomed")
+        
+        plt.show()
 
 
 ###################################################################################
