@@ -449,16 +449,16 @@ class Pendulum(BoundaryValueProblem):
     t ⟼ (x_1, x_2, lambda)
     """
 
-    def __init__(self, t_start=0, t_end=2, mini_batch=128):
+    def __init__(self, init_pos=[1, 0], init_vel=[0, 0], gravity=1.5, t_start=0, t_end=2, mini_batch=128):
         """
         Constructor for a pendulum.
         """
 
         super().__init__()
 
-        initPos = lambda t: tf.concat([0 * t + 1, 0 * t + 0], axis=1)
-        initVel = lambda t: tf.concat([0 * t + 0, 0 * t + 0], axis=1)
-        ode = lambda u, t, alpha: -alpha * u - tf.concat([0 * t + 0, 0 * t + 1.5], axis=1)
+        initPos = lambda t: tf.concat([0*t + init_pos[0], 0*t + init_pos[1]], axis=1)
+        initVel = lambda t: tf.concat([0*t + init_vel[0], 0*t + init_vel[1]], axis=1)
+        ode = lambda u, t, alpha: -alpha * u - tf.concat([0*t + 0, 0*t + gravity], axis=1)
 
         self.conditions = [
             Condition("initialPos",
