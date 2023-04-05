@@ -305,11 +305,11 @@ def plot_phaseplot(solver):
             pendulum.set_data([0, xd[frame]], [0, yd[frame]])
             ln.set_data(xd[start:frame+1], yd[start:frame+1])
             sc.set_data(xd[frame], yd[frame])
-            title.set_text(u"t = {:.3f}".format(frame))
+            title.set_text(u"t = {:.3f}".format(10 * frame / 600))
 
             return ln, sc, pendulum, title
 
-        anim = FuncAnimation(fig, update, frames=np.arange(len(tspace)),
+        anim = FuncAnimation(fig, update, frames=len(tspace),
                             init_func=init, blit=True, interval=16)
 
         anim.save("../out/%s_solution.gif" % solver.bvp.__class__.__name__, fps=60)
