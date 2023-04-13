@@ -9,8 +9,8 @@ t_mid = 5.
 t_end = 10.
 
 solver01 = Solver(Pendulum(t_start=t_start, t_end=t_mid), num_hidden_layers=6, num_neurons_per_layer=16)
-lr = tf.keras.optimizers.schedules.ExponentialDecay(0.001, decay_steps=500, decay_rate=0.9)
-optim = tf.keras.optimizers.Adam(learning_rate=lr)
+#lr = tf.keras.optimizers.schedules.ExponentialDecay(0.1, decay_steps=500, decay_rate=0.9)
+optim = tf.keras.optimizers.Adam(learning_rate=0.01)
 
 # Train first section model
 solver01.train(optim, N, -1)
@@ -23,8 +23,8 @@ print("Initial position: ", init_pos, "Initial velocity: ", init_vel)
 
 # Train second section model
 solver12 = Solver(Pendulum(init_pos, init_vel, t_start=t_mid, t_end=t_end), num_hidden_layers=6, num_neurons_per_layer=16)
-lr = tf.keras.optimizers.schedules.ExponentialDecay(0.001, decay_steps=500, decay_rate=0.9)
-optim = tf.keras.optimizers.Adam(learning_rate=lr)
+#lr = tf.keras.optimizers.schedules.ExponentialDecay(0.01, decay_steps=500, decay_rate=0.9)
+optim = tf.keras.optimizers.Adam(learning_rate=0.01)
 solver12.train(optim, N, -1)
 
 # Combine models
