@@ -1,7 +1,7 @@
 from PDESolver import *
 
 # Number of iterations
-N = 1000
+N = 5000
 
 # Initialize solver, learning rate scheduler and choose optimizer
 t_start = 0.

@@ -150,7 +150,7 @@ class Solver:
         -----------
         tuple: Tuple of gradients
         """
-
+        
         with tf.GradientTape(persistent=True) as tape:
             tape.watch(self.model.trainable_variables)
             pdeloss, dataloss = self.compute_losses()
@@ -184,6 +184,7 @@ class Solver:
                 
         return result
     
+    @tf.function
     def train_step(self, optimizer):
         """
         Performs a single training step.
@@ -227,10 +228,8 @@ class Solver:
         k_max = int(np.ceil(np.log10(iterations))) + 1
         pbar = tqdm(range(iterations), desc='Pending...')
 
-        train_step = tf.function(lambda: self.train_step(optimizer))
-
         for i in pbar:
-            loss, gradients, new_weight = train_step()
+            loss, gradients, new_weight = self.train_step(optimizer)
             
             self.loss_history += [loss.numpy()]
             
@@ -244,7 +243,7 @@ class Solver:
                 self.weight_history += [new_weight.numpy()]
             
             avg_loss = np.mean(self.loss_history[-100:])
-            pbar.desc = f'øloss = {avg_loss:.3e} (best: {best_loss:.3e}, {iterations_since_last_improvement:0{k_max}d}it ago) lr = {optimizer.lr:.5f}'
+            pbar.desc = f'øloss = {avg_loss:.3e} (best: {best_loss:.3e}, {iterations_since_last_improvement:0{k_max}d}it ago) lr = {optimizer.lr.numpy():.5f}'
 
             if debug_frequency > 0 and (i % debug_frequency == 0 or i == iterations - 1):
                 self.show_debugplot(gradients)
