@@ -6,9 +6,8 @@ from tqdm import tqdm
 import warnings
 import logging
 import os
-from sys import stdout
 
-__all__ = ['Solver']	
+__all__ = ['Solver', 'Optimizer']	
 
 warnings.filterwarnings("ignore", category=UserWarning)
 logging.getLogger('tensorflow').setLevel(logging.ERROR)
@@ -16,7 +15,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
 class Solver:
-    def __init__(self, bvp, num_hidden_layers=4, num_neurons_per_layer=50):
+    def __init__(self, bvp, optimizer, num_hidden_layers=4, num_neurons_per_layer=50):
         """
         Constructor for the Solver class.
 
@@ -24,6 +23,8 @@ class Solver:
         -----------
         bvp: BoundaryValueProblem
             Boundary value problem to be solved
+        optimizer: Optimizer
+            Optimizer to be used for training the neural network
         num_hidden_layers: int
             Number of hidden layers in the neural network
             Defaults to 4
@@ -39,6 +40,7 @@ class Solver:
 
         self.model = init_model(num_inputs, num_outputs, num_hidden_layers, num_neurons_per_layer, mean, variance)
         self.bvp = bvp
+        self.optimizer = optimizer
 
         self.loss_history = []
         self.weight_history = [1]
@@ -185,7 +187,7 @@ class Solver:
         return result
     
     @tf.function
-    def train_step(self, optimizer):
+    def train_step(self):
         """
         Performs a single training step.
 
@@ -206,21 +208,22 @@ class Solver:
         else:
             new_weight = -1.0
             
-        optimizer.apply_gradients(zip(gradients[2], self.model.trainable_variables))
+        self.optimizer.apply_gradients(zip(gradients[2], self.model.trainable_variables))
         self.step.assign(self.step + 1)
         
         return loss, gradients, new_weight
 
-    def train(self, optimizer, iterations=10000, debug_frequency=2500):
+    def train(self, iterations=10000, debug_frequency=2500):
         """
         Trains the neural network to solve the boundary value problem.
 
         Parameters
         -----------
-        optimizer: optimizer
-            Optimizer to use for training
-        iterations: int
+        iterations: int (default=10000)
             Number of iterations to train for
+        debug_frequency: int (default=2500)
+            Frequency (every X iterations) at which to show debug panel.
+            If negative, no debug panel is shown
         """
 
         best_loss = np.inf
@@ -229,9 +232,10 @@ class Solver:
         pbar = tqdm(range(iterations), desc='Pending...')
 
         for i in pbar:
-            loss, gradients, new_weight = self.train_step(optimizer)
+            loss, gradients, new_weight = self.train_step()
             
             self.loss_history += [loss.numpy()]
+            self.optimizer.anneal_on_plateau(self.loss_history)
             
             if loss.numpy() < best_loss:
                 best_loss = loss.numpy()
@@ -243,7 +247,7 @@ class Solver:
                 self.weight_history += [new_weight.numpy()]
             
             avg_loss = np.mean(self.loss_history[-100:])
-            pbar.desc = f'øloss = {avg_loss:.3e} (best: {best_loss:.3e}, {iterations_since_last_improvement:0{k_max}d}it ago) lr = {optimizer.lr.numpy():.5f}'
+            pbar.desc = f'øloss = {avg_loss:.3e} (best: {best_loss:.3e}, {iterations_since_last_improvement:0{k_max}d}it ago) lr = {self.optimizer.lr.numpy():.5f}'
 
             if debug_frequency > 0 and (i % debug_frequency == 0 or i == iterations - 1):
                 self.show_debugplot(gradients)
@@ -309,6 +313,25 @@ class Solver:
         
         plt.show()
 
+
+class Optimizer(tf.keras.optimizers.Adam):
+    def __init__(self, initial_learning_rate=0.01, annealing_factor=0.9, patience=100, **kwargs):
+        super().__init__(initial_learning_rate, **kwargs)
+        
+        self.annealing_factor = annealing_factor
+        self._initial_patience = patience
+        self.patience = patience
+
+    def anneal_on_plateau(self, loss_history):
+        if len(loss_history) < 10:
+            return
+         
+        if np.mean(loss_history[-10:]) > np.min(loss_history):
+            self.patience -= 1
+
+        if self.patience == 0:
+            self.lr.assign(self.lr * self.annealing_factor)
+            self.patience = self._initial_patience
 
 ###################################################################################
 ###################################################################################
