@@ -49,7 +49,7 @@ lr = tf.keras.optimizers.schedules.ExponentialDecay(0.001, decay_steps=500, deca
 optim = tf.keras.optimizers.Adam(learning_rate=lr)
 
 # Train model and plot result
-solver.train(optim, lr, N, N)
+solver.train(optim, N, N)
 
 N = 1000
 tspace = np.linspace(0, 1, N + 1)

@@ -28,7 +28,7 @@ lr = tf.keras.optimizers.schedules.ExponentialDecay(0.001, decay_steps=500, deca
 optim = tf.keras.optimizers.Adam(learning_rate=lr)
 
 # Train model and plot results
-solver.train(optim, lr, N, N)
+solver.train(optimr, N, N)
 
 def u(t, x): return tf.sin(pi * t) * tf.sin(4*pi * x)
 error_plot_2D(solver, u, ('x', 'y'), (-1, 1, -1, 1))

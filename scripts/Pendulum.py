@@ -13,7 +13,7 @@ lr = tf.keras.optimizers.schedules.ExponentialDecay(0.001, decay_steps=500, deca
 optim = tf.keras.optimizers.Adam(learning_rate=lr)
 
 # Train first section model
-solver01.train(optim, lr, N, -1)
+solver01.train(optim, N, -1)
 
 # Determine initial conditions for next section
 data = solver01.compute_differentials(tf.constant([[t_mid]]))
@@ -25,7 +25,7 @@ print("Initial position: ", init_pos, "Initial velocity: ", init_vel)
 solver12 = Solver(Pendulum(init_pos, init_vel, t_start=t_mid, t_end=t_end), num_hidden_layers=6, num_neurons_per_layer=16)
 lr = tf.keras.optimizers.schedules.ExponentialDecay(0.001, decay_steps=500, decay_rate=0.9)
 optim = tf.keras.optimizers.Adam(learning_rate=lr)
-solver12.train(optim, lr, N, -1)
+solver12.train(optim, N, -1)
 
 # Combine models
 class Connect:

@@ -9,6 +9,6 @@ lr = tf.keras.optimizers.schedules.ExponentialDecay(0.001, decay_steps=1000, dec
 optim = tf.keras.optimizers.Adam(learning_rate=lr)
 
 # Train model and plot results
-solver.train(optim, lr, N, debug_frequency=0)
+solver.train(optim, N, debug_frequency=0)
 
 debug_plot_2D(solver, ('t', 'x'), (0, 1, -1, 1))

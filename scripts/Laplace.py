@@ -10,7 +10,7 @@ lr = tf.keras.optimizers.schedules.ExponentialDecay(0.01, decay_steps=500, decay
 optim = tf.keras.optimizers.Adam(learning_rate=lr)
 
 # Train model and plot results
-solver.train(optim, lr, N, N)
+solver.train(optim, N, N)
 
 # Math: G_n = \frac{2}{\sinh\left(N\pi\right)}\int_{0}^{1}2t\left(1-t\right)\sin\left(N\pi t\right)dt
 # Math: u(x, y) = \sum_{n=1}^{k}G\left[n\right]\sinh\left(n\pi y\right)\sin\left(n\pi x\right)

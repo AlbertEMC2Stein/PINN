@@ -210,7 +210,7 @@ class Solver:
         
         return loss, gradients, new_weight
 
-    def train(self, optimizer, lr_scheduler, iterations=10000, debug_frequency=2500):
+    def train(self, optimizer, iterations=10000, debug_frequency=2500):
         """
         Trains the neural network to solve the boundary value problem.
 
@@ -218,8 +218,6 @@ class Solver:
         -----------
         optimizer: optimizer
             Optimizer to use for training
-        lr_scheduler: lr_scheduler
-            Learning rate scheduler to use for training
         iterations: int
             Number of iterations to train for
         """
@@ -246,7 +244,7 @@ class Solver:
                 self.weight_history += [new_weight.numpy()]
             
             avg_loss = np.mean(self.loss_history[-100:])
-            pbar.desc = f'øloss = {avg_loss:.3e} (best: {best_loss:.3e}, {iterations_since_last_improvement:0{k_max}d}it ago) lr = {lr_scheduler(i):.5f}'
+            pbar.desc = f'øloss = {avg_loss:.3e} (best: {best_loss:.3e}, {iterations_since_last_improvement:0{k_max}d}it ago) lr = {optimizer.lr:.5f}'
 
             if debug_frequency > 0 and (i % debug_frequency == 0 or i == iterations - 1):
                 self.show_debugplot(gradients)
