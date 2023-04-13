@@ -22,11 +22,10 @@ class Oscillator(BoundaryValueProblem):
 N = 10000
 
 # Initialize solver, learning rate scheduler and choose optimizer
-solver = Solver(Oscillator(), num_hidden_layers=4, num_neurons_per_layer=50)
-lr = tf.keras.optimizers.schedules.ExponentialDecay(0.001, decay_steps=500, decay_rate=0.9)
-optim = tf.keras.optimizers.Adam(learning_rate=lr)
+optim = Optimizer(initial_learning_rate=0.01, annealing_factor=0.9)
+solver = Solver(Oscillator(), optim, num_hidden_layers=4, num_neurons_per_layer=50)
 
 # Train model and plot results
-solver.train(optim, N, N)
+solver.train(iterations=N, debug_frequency=N)
 
 error_plot_2D(solver, lambda t, x: np.cos(t * x), ('t', 'x'), (1, 2, 0, 6.283))

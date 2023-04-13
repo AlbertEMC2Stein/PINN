@@ -44,12 +44,11 @@ class KleinGordon(BoundaryValueProblem):
 N = 10000
 
 # Initialize solver, learning rate scheduler and choose optimizer
-solver = Solver(KleinGordon(), num_hidden_layers=4, num_neurons_per_layer=50)
-lr = tf.keras.optimizers.schedules.ExponentialDecay(0.001, decay_steps=500, decay_rate=0.9)
-optim = tf.keras.optimizers.Adam(learning_rate=lr)
+optim = Optimizer(initial_learning_rate=0.01, annealing_factor=0.9)
+solver = Solver(KleinGordon(), optim, num_hidden_layers=4, num_neurons_per_layer=50)
 
 # Train model and plot result
-solver.train(optim, N, N)
+solver.train(iterations=N, debug_frequency=N)
 
 N = 1000
 tspace = np.linspace(0, 1, N + 1)

@@ -20,15 +20,14 @@ class HelmholtzEquation(BoundaryValueProblem):
         self.specification = Specification(["u"], ["x", "y"], ["u_xx", "u_yy"])
 
 # Number of iterations
-N = 1000
+N = 2000
 
-# Initialize solver, learning rate scheduler and choose optimizer
-solver = Solver(HelmholtzEquation(), num_hidden_layers=4, num_neurons_per_layer=50)
-lr = tf.keras.optimizers.schedules.ExponentialDecay(0.001, decay_steps=500, decay_rate=0.9)
-optim = tf.keras.optimizers.Adam(learning_rate=lr)
+# Initialize solver
+optim = Optimizer(initial_learning_rate=0.01, annealing_factor=0.9)
+solver = Solver(HelmholtzEquation(), optim, num_hidden_layers=4, num_neurons_per_layer=50)
 
 # Train model and plot results
-solver.train(optim, N, N)
+solver.train(iterations=N, debug_frequency=N)
 
 def u(t, x): return tf.sin(pi * t) * tf.sin(4*pi * x)
 error_plot_2D(solver, u, ('x', 'y'), (-1, 1, -1, 1))
