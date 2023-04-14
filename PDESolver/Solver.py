@@ -139,7 +139,7 @@ class Solver:
         for i, (name, residual) in enumerate(residuals.items()):
             losses[name] += self.weights[i] * criterion(residual, 0.0)
 
-        return losses['inner'], sum([value for key, value in losses.items() if key != 'inner']) 
+        return losses
  
     def compute_gradients(self):
         """
@@ -152,8 +152,11 @@ class Solver:
         
         with tf.GradientTape(persistent=True) as tape:
             tape.watch(self.model.trainable_variables)
-            pdeloss, dataloss = self.compute_losses()
-            totalloss = pdeloss + dataloss
+            losses = self.compute_losses()
+
+            pdeloss = losses['inner']
+            dataloss = sum(losses.values()) - pdeloss
+            totalloss = sum(losses.values())
 
             pdegrad = tape.gradient(pdeloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
             datagrad = tape.gradient(dataloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
