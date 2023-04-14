@@ -135,15 +135,11 @@ class Solver:
         criterion = tf.keras.losses.MeanSquaredError()
         residuals = self.compute_residuals()
 
-        pdeloss = 0
-        dataloss = 0
+        losses = {name: 0.0 for name in residuals.keys()}
         for i, (name, residual) in enumerate(residuals.items()):
-            if name == 'inner':
-                pdeloss += self.weights[i] * criterion(residual, 0.0)
-            else:
-                dataloss += self.weights[i] * criterion(residual, 0.0)
+            losses[name] += self.weights[i] * criterion(residual, 0.0)
 
-        return pdeloss, dataloss 
+        return losses['inner'], sum([value for key, value in losses.items() if key != 'inner']) 
  
     def compute_gradients(self):
         """
