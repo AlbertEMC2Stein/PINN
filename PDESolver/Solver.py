@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.transforms import blended_transform_factory
 from scipy.stats import gaussian_kde
 from tqdm import tqdm
 import warnings
@@ -235,7 +236,7 @@ class Solver:
             loss, gradients, new_weight = self.train_step()
             
             self.loss_history += [loss.numpy()]
-            self.optimizer.anneal_on_plateau(self.loss_history)
+            self.optimizer.anneal_on_plateau(self.loss_history, i)
             
             if loss.numpy() < best_loss:
                 best_loss = loss.numpy()
@@ -289,23 +290,37 @@ class Solver:
             axs[ax_count].legend()
 
         n = len(self.loss_history)
-        k = min(100, n)
-        averaged_loss = np.convolve(self.loss_history, np.ones(k) / k, mode='same')
+        averaged_loss = [np.mean(self.loss_history[:k+1] if k < 99 else self.loss_history[k-99:k+1]) for k in range(n)]
         best_loss = np.min(self.loss_history)
 
         axs = subfigs[1].subplots(1, 2)
-        axs[0].semilogy(range(n), self.loss_history, 'k-', lw=0.5)
-        axs[0].semilogy(range(n), averaged_loss, 'r--', lw=1)
+        trans = blended_transform_factory(axs[0].transAxes, axs[0].transData)
+        loss_handle, = axs[0].semilogy(range(n), self.loss_history, 'k-', lw=0.5, alpha=0.5, label='Loss')
+        avg_loss_handle, = axs[0].semilogy(range(n), averaged_loss, 'r--', lw=1, label=f'$ø_{{{min(100, n)}}}$ Loss')
         axs[0].axhline(best_loss, color='g', lw=0.5)
-        axs[0].set_title('Loss History')
+        axs[0].text(0.934, 0.97 * best_loss, f'Best: {best_loss:.3e}', ha='left', va='top', color='g', transform=trans)
+
+        ax = axs[0].twinx()
+        ax.set_yscale('log')
+        for update_nr in range(len(self.optimizer.lr_history) - 1):
+            lr, step_old = self.optimizer.lr_history[update_nr]
+            _, step_new = self.optimizer.lr_history[update_nr + 1]
+            ax.plot([step_old, step_new], [lr, lr], 'b--', lw=0.5)
+        
+        lr, step = self.optimizer.lr_history[-1]
+        lr_handle, = ax.plot([step, n], [lr, lr], 'b--', lw=0.5, label='Learning Rate')
+
+        axs[0].set_title('Loss (left) and learning rate (right) history')
         axs[0].set_xlabel('Iteration')
-        axs[0].set_ylabel('Loss')
         axs[0].set_xlim(0, n - (1 if n > 1 else 0))
+
+        if n > 1:
+            handles = [loss_handle, avg_loss_handle, lr_handle]
+            axs[0].legend(handles=handles, loc='lower left')
 
         axs[1].plot(self.weight_history, 'k', lw=0.5)
         axs[1].set_title('Weight History')
-        axs[1].set_xlabel('#Update')
-        axs[1].set_ylabel('Weight')
+        axs[1].set_xlabel('Update #')
         axs[1].set_xlim(0, len(self.weight_history) - 1)
 
         figManager = plt.get_current_fig_manager()
@@ -322,15 +337,29 @@ class Optimizer(tf.keras.optimizers.Adam):
         self._initial_patience = patience
         self.patience = patience
 
-    def anneal_on_plateau(self, loss_history):
-        if len(loss_history) < 10:
+        self.lr_history = [(initial_learning_rate, 0)]
+
+    def anneal_on_plateau(self, loss_history, iteration):         
+        n = len(loss_history)
+
+        if n < 50:
             return
-         
-        if np.mean(loss_history[-10:]) > np.min(loss_history):
+
+        mean_at_iteration = lambda k: np.mean(loss_history[k - 99:k + 1] if k > 99 else loss_history[:k + 1])
+
+        old_average = mean_at_iteration(n - 50)
+        new_average = mean_at_iteration(n)
+
+        if old_average / new_average < 1.2:
             self.patience -= 1
 
         if self.patience == 0:
-            self.lr.assign(self.lr * self.annealing_factor)
+            if abs(old_average / new_average - 1.025) < 0.025:
+                self.lr.assign(self.lr / (self.annealing_factor**3))
+            else:
+                self.lr.assign(self.lr * self.annealing_factor)
+
+            self.lr_history += [(self.lr.numpy(), iteration)]
             self.patience = self._initial_patience
 
 ###################################################################################
