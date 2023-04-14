@@ -20,10 +20,10 @@ class HelmholtzEquation(BoundaryValueProblem):
         self.specification = Specification(["u"], ["x", "y"], ["u_xx", "u_yy"])
 
 # Number of iterations
-N = 2000
+N = 40000
 
 # Initialize solver
-optim = Optimizer(initial_learning_rate=0.01, annealing_factor=0.9)
+optim = Optimizer(initial_learning_rate=0.01, annealing_factor=0.9, patience=250)
 solver = Solver(HelmholtzEquation(), optim, num_hidden_layers=4, num_neurons_per_layer=50)
 
 # Train model and plot results
