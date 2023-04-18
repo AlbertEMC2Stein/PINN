@@ -171,8 +171,8 @@ class Solver:
             Tuple of gradients of the PDE and data losses obtained from compute_gradients
         """
 
-        pde_gradient = tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients[0]], axis=0)
-        data_gradient = tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients[1]], axis=0)
+        pde_gradient = tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients['inner']], axis=0)
+        data_gradient = tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients['boundary']], axis=0)
         new_weight = tf.reduce_max(tf.abs(pde_gradient)) / (tf.reduce_mean(tf.abs(data_gradient)))
         
         result = None
@@ -182,6 +182,21 @@ class Solver:
                 self.weights[i].assign(result)
                 
         return result
+
+        gradient_vectors = [tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients_list], axis=0) for gradients_list in gradients.items()]
+        variances = [tf.math.reduce_variance(gradient) for gradient in gradient_vectors.items()]
+        most_varying = tf.math.argmax(variances)
+        
+        result = {}
+        for i, cond in enumerate(self.bvp.get_conditions()):
+            if i != most_varying:
+                new_weight = tf.reduce_max(tf.abs(gradient_vectors[most_varying])) / (tf.reduce_mean(tf.abs(gradient_vectors[i])))
+                result[cond.name] = 0.25 * self.weights[i] + 0.75 * new_weight
+                self.weights[i].assign(result[cond.name])
+            else:
+                result[cond.name] = self.weights[i]
+                
+        return tf.math.reduce_max(result.values())
     
     @tf.function
     def train_step(self):
@@ -205,7 +220,7 @@ class Solver:
         else:
             new_weight = -1.0
             
-        self.optimizer.apply_gradients(zip(gradients[2], self.model.trainable_variables))
+        self.optimizer.apply_gradients(zip(gradients['total'], self.model.trainable_variables))
         self.step.assign(self.step + 1)
         
         return loss, gradients, new_weight
@@ -247,7 +262,8 @@ class Solver:
             pbar.desc = f'øloss = {avg_loss:.3e} (best: {best_loss:.3e}, {iterations_since_last_improvement:0{k_max}d}it ago) lr = {self.optimizer.lr.numpy():.5f}'
 
             if debug_frequency > 0 and (i % debug_frequency == 0 or i == iterations - 1):
-                self.show_debugplot(gradients)
+                gradients_ = (gradients['inner'], gradients['boundary'])
+                self.show_debugplot(gradients_)
 
     def show_debugplot(self, gradients):
         """
