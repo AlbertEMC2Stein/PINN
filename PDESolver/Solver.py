@@ -171,32 +171,24 @@ class Solver:
             Tuple of gradients of the PDE and data losses obtained from compute_gradients
         """
 
-        pde_gradient = tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients['inner']], axis=0)
-        data_gradient = tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients['boundary']], axis=0)
-        new_weight = tf.reduce_max(tf.abs(pde_gradient)) / (tf.reduce_mean(tf.abs(data_gradient)))
-        
-        result = None
-        for i, cond in enumerate(self.bvp.get_conditions()):
-            if cond.name != 'inner':
-                result = 0.25 * self.weights[i] + 0.75 * new_weight
-                self.weights[i].assign(result)
-                
-        return result
-
-        gradient_vectors = [tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients_list], axis=0) for gradients_list in gradients.items()]
-        variances = [tf.math.reduce_variance(gradient) for gradient in gradient_vectors.items()]
+        gradient_vectors = [tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients_list], axis=0) for gradients_list in gradients.values()]
+        variances = [tf.math.reduce_variance(gradient) for gradient in gradient_vectors]
         most_varying = tf.math.argmax(variances)
-        
-        result = {}
+        most_varying_absmax = tf.math.reduce_max(tf.abs(tf.gather(gradient_vectors, most_varying)))
+
+        new_weights = {}
         for i, cond in enumerate(self.bvp.get_conditions()):
+            name = cond.name
             if i != most_varying:
-                new_weight = tf.reduce_max(tf.abs(gradient_vectors[most_varying])) / (tf.reduce_mean(tf.abs(gradient_vectors[i])))
-                result[cond.name] = 0.25 * self.weights[i] + 0.75 * new_weight
-                self.weights[i].assign(result[cond.name])
+                new_weight = most_varying_absmax / (tf.reduce_mean(tf.abs(gradient_vectors[i])))
+                new_weight = 0.1 * self.weights[i] + 0.9 * new_weight
+
+                new_weights[name] = new_weight
+                self.weights[i].assign(new_weight)
             else:
-                result[cond.name] = self.weights[i]
+                new_weights[name] = self.weights[i]
                 
-        return tf.math.reduce_max(result.values())
+        return new_weights
     
     @tf.function
     def train_step(self):
