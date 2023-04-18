@@ -153,16 +153,13 @@ class Solver:
         with tf.GradientTape(persistent=True) as tape:
             tape.watch(self.model.trainable_variables)
             losses = self.compute_losses()
+            losses['total'] = sum(losses.values())
 
-            pdeloss = losses['inner']
-            dataloss = sum(losses.values()) - pdeloss
-            totalloss = sum(losses.values())
+            kwargs = {'sources': self.model.trainable_variables, 'unconnected_gradients': tf.UnconnectedGradients.ZERO}
+            grads = {name: tape.gradient(loss, **kwargs) for name, loss in losses.items()}
 
-            pdegrad = tape.gradient(pdeloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
-            datagrad = tape.gradient(dataloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
-            totalgrad = tape.gradient(totalloss, self.model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
+        return losses['total'], grads
 
-        return totalloss, (pdegrad, datagrad, totalgrad)
 
     def adjust_weights(self, gradients):
         """
