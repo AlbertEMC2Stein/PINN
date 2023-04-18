@@ -208,14 +208,14 @@ class Solver:
         loss, gradients = self.compute_gradients()
         
         if self.step % 10 == 0:
-            new_weight = self.adjust_weights(gradients)
+            new_weights = self.adjust_weights(gradients)  
         else:
-            new_weight = -1.0
+            new_weights = {cond.name: -1. for cond in self.bvp.get_conditions()}          
             
         self.optimizer.apply_gradients(zip(gradients['total'], self.model.trainable_variables))
         self.step.assign(self.step + 1)
         
-        return loss, gradients, new_weight
+        return loss, gradients, new_weights
 
     def train(self, iterations=10000, debug_frequency=2500):
         """
@@ -236,7 +236,7 @@ class Solver:
         pbar = tqdm(range(iterations), desc='Pending...')
 
         for i in pbar:
-            loss, gradients, new_weight = self.train_step()
+            loss, gradients, new_weights = self.train_step()
             
             self.loss_history += [loss.numpy()]
             self.optimizer.anneal_on_plateau(self.loss_history, i)
@@ -247,8 +247,8 @@ class Solver:
             else:
                 iterations_since_last_improvement += 1
             
-            if new_weight != -1:
-                self.weight_history += [new_weight.numpy()]
+            if list(new_weights)[0] != -1:
+                self.weight_history += [new_weights['boundary'].numpy()]
             
             avg_loss = np.mean(self.loss_history[-100:])
             pbar.desc = f'øloss = {avg_loss:.3e} (best: {best_loss:.3e}, {iterations_since_last_improvement:0{k_max}d}it ago) lr = {self.optimizer.lr.numpy():.5f}'
@@ -359,7 +359,7 @@ class Optimizer(tf.keras.optimizers.Adam):
 
         if self.patience == 0:
             if abs(old_average / new_average - 1.025) < 0.025:
-                self.lr.assign(self.lr / (self.annealing_factor**3))
+                self.lr.assign(self.lr / (self.annealing_factor**2))
             else:
                 self.lr.assign(self.lr * self.annealing_factor)
 
