@@ -9,7 +9,7 @@ def u(t, x):
 N = 10000
 
 # Initialize solver, learning rate scheduler and choose optimizer
-optim = Optimizer(initial_learning_rate=0.01, annealing_factor=0.9)
+optim = Optimizer(initial_learning_rate=0.001, decay_steps=1000, decay_rate=0.92)
 solver = Solver(WaveEquation1D(), optim, num_hidden_layers=4, num_neurons_per_layer=50)
 
 # Train model and plot results
