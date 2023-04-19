@@ -8,11 +8,11 @@ t_start = 0.
 t_mid = 5.
 t_end = 10.
 
-optim = Optimizer(initial_learning_rate=0.01, annealing_factor=0.9)
+optim = Optimizer(initial_learning_rate=0.01, decay_steps=200, decay_rate=0.9)
 solver01 = Solver(Pendulum(t_start=t_start, t_end=t_mid), optim, num_hidden_layers=6, num_neurons_per_layer=16)
 
 # Train first section model
-solver01.train(iterations=N, debug_frequency=-1)
+solver01.train(iterations=N, debug_frequency=N)
 
 # Determine initial conditions for next section
 data = solver01.compute_differentials(tf.constant([[t_mid]]))
@@ -21,9 +21,9 @@ init_vel = data['u_t'].numpy()[0]
 print("Initial position: ", init_pos, "Initial velocity: ", init_vel)
 
 # Train second section model
-optim = Optimizer(initial_learning_rate=0.01, annealing_factor=0.9)
+optim = Optimizer(initial_learning_rate=0.01, decay_steps=200, decay_rate=0.9)
 solver12 = Solver(Pendulum(init_pos, init_vel, t_start=t_mid, t_end=t_end), optim, num_hidden_layers=6, num_neurons_per_layer=16)
-solver12.train(iterations=N, debug_frequency=-1)
+solver12.train(iterations=N, debug_frequency=N)
 
 # Combine models
 class Connect:
