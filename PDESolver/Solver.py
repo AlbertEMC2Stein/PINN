@@ -171,12 +171,13 @@ class Solver:
             Tuple of gradients of the PDE and data losses obtained from compute_gradients
         """
 
-        gradient_vectors = [tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients_list], axis=0) for gradients_list in gradients.values()]
+        gradient_vectors = [tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients_list], axis=0) for gradients_list in gradients.values()][:-1] # excluding 'totalgrad'
         variances = [tf.math.reduce_variance(gradient) for gradient in gradient_vectors]
         most_varying = tf.math.argmax(variances)
         most_varying_absmax = tf.math.reduce_max(tf.abs(tf.gather(gradient_vectors, most_varying)))
 
         new_weights = {}
+        minimal = tf.float32.max
         for i, cond in enumerate(self.bvp.get_conditions()):
             name = cond.name
             if i != most_varying:
@@ -187,6 +188,10 @@ class Solver:
                 self.weights[i].assign(new_weight)
             else:
                 new_weights[name] = self.weights[i]
+
+            minimal = tf.math.minimum(minimal, new_weights[name])
+
+        new_weights = {name: new_weights[name] / minimal for name in new_weights.keys()}
                 
         return new_weights
     
