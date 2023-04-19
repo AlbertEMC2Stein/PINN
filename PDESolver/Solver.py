@@ -182,7 +182,7 @@ class Solver:
             name = cond.name
             if i != most_varying:
                 new_weight = most_varying_absmax / (tf.reduce_mean(tf.abs(gradient_vectors[i])))
-                new_weight = 0.1 * self.weights[i] + 0.9 * new_weight
+                new_weight = 0.75 * self.weights[i] + 0.25 * new_weight
 
                 new_weights[name] = new_weight
                 self.weights[i].assign(new_weight)
@@ -244,7 +244,6 @@ class Solver:
             loss, gradients, new_weights = self.train_step()
             
             self.loss_history += [loss.numpy()]
-            self.optimizer.anneal_on_plateau(self.loss_history, i)
             
             if loss.numpy() < best_loss:
                 best_loss = loss.numpy()
@@ -288,8 +287,8 @@ class Solver:
             density = lambda i, x: gaussian_kde(layer_gradient(i).numpy())(x)
 
             xs = np.linspace(-2.5, 2.5, 1000)
-            axs[ax_count].plot(xs, density('inner', xs), 'orange', lw=0.5, label='PDE')
-            axs[ax_count].plot(xs, density('boundary', xs), 'b--', lw=0.5, label='Data')
+            for cond in self.bvp.get_conditions():
+                axs[ax_count].plot(xs, density(cond.name, xs), lw=0.5, label=cond.name)
 
             axs[ax_count].set_xlim(min(xs), max(xs))
             axs[ax_count].set_ylim(0, 100)
@@ -310,13 +309,7 @@ class Solver:
 
         ax = axs[0].twinx()
         ax.set_yscale('log')
-        for update_nr in range(len(self.optimizer.lr_history) - 1):
-            lr, step_old = self.optimizer.lr_history[update_nr]
-            _, step_new = self.optimizer.lr_history[update_nr + 1]
-            ax.plot([step_old, step_new], [lr, lr], 'b--', lw=0.5)
-        
-        lr, step = self.optimizer.lr_history[-1]
-        lr_handle, = ax.plot([step, n], [lr, lr], 'b--', lw=0.5, label='Learning Rate')
+        lr_handle, = ax.plot(self.optimizer.lr_history_upto(n), 'b-', lw=0.5, label='Learning rate')
 
         axs[0].set_title('Loss (left) and learning rate (right) history')
         axs[0].set_xlabel('Iteration')
@@ -343,37 +336,14 @@ class Solver:
 
 
 class Optimizer(tf.keras.optimizers.Adam):
-    def __init__(self, initial_learning_rate=0.01, annealing_factor=0.9, patience=100, **kwargs):
-        super().__init__(initial_learning_rate, **kwargs)
+    def __init__(self, initial_learning_rate=1e-3, decay_steps=1000, decay_rate=0.9):
+        self.lr_scheduler = tf.keras.optimizers.schedules.ExponentialDecay(initial_learning_rate, decay_steps, decay_rate) 
+        super().__init__(learning_rate=self.lr_scheduler)
+
+    def lr_history_upto(self, iteration):
+        iters = np.arange(0, iteration + 1)
+        return self.lr_scheduler(iters)
         
-        self.annealing_factor = annealing_factor
-        self._initial_patience = patience
-        self.patience = patience
-
-        self.lr_history = [(initial_learning_rate, 0)]
-
-    def anneal_on_plateau(self, loss_history, iteration):         
-        n = len(loss_history)
-
-        if n < 50:
-            return
-
-        mean_at_iteration = lambda k: np.mean(loss_history[k - 99:k + 1] if k > 99 else loss_history[:k + 1])
-
-        old_average = mean_at_iteration(n - 50)
-        new_average = mean_at_iteration(n)
-
-        if old_average / new_average < 1.2:
-            self.patience -= 1
-
-        if self.patience == 0:
-            if abs(old_average / new_average - 1.025) < 0.025:
-                self.lr.assign(self.lr / (self.annealing_factor**2))
-            else:
-                self.lr.assign(self.lr * self.annealing_factor)
-
-            self.lr_history += [(self.lr.numpy(), iteration)]
-            self.patience = self._initial_patience
 
 ###################################################################################
 ###################################################################################

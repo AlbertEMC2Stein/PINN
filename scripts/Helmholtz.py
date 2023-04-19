@@ -20,14 +20,14 @@ class HelmholtzEquation(BoundaryValueProblem):
         self.specification = Specification(["u"], ["x", "y"], ["u_xx", "u_yy"])
 
 # Number of iterations
-N = 10000
+N = 40000
 
 # Initialize solver
-optim = Optimizer(initial_learning_rate=0.001, annealing_factor=0.9, patience=250)
+optim = Optimizer(initial_learning_rate=0.001, decay_steps=1000, decay_rate=0.95)
 solver = Solver(HelmholtzEquation(), optim, num_hidden_layers=4, num_neurons_per_layer=50)
 
 # Train model and plot results
-solver.train(iterations=N, debug_frequency=N)
+solver.train(iterations=N, debug_frequency=N//4)
 
 def u(t, x): return tf.sin(pi * t) * tf.sin(4*pi * x)
 error_plot_2D(solver, u, ('x', 'y'), (-1, 1, -1, 1))
