@@ -7,13 +7,13 @@ class Oscillator(BoundaryValueProblem):
         self.conditions = [
             Condition("initial",
                       lambda Du: Du["u"] - 1,
-                      (Cuboid([1, 0], [2, 0]), 256)),
+                      (Cuboid([1, 0], [2, 0]), 128)),
             Condition("initial_x",
                       lambda Du: Du["u_x"],
-                      (Cuboid([1, 0], [2, 0]), 256)),
+                      (Cuboid([1, 0], [2, 0]), 128)),
             Condition("inner",
                       lambda Du: Du["u_xx"] + Du["t"]**2 * Du["u"],
-                      (Cuboid([1, 0], [2, 6.283]), 256))
+                      (Cuboid([1, 0], [2, 6.283]), 128))
         ]
 
         self.specification = Specification(["u"], ["t", "x"], ["u_xx"])
