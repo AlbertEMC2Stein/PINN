@@ -44,7 +44,7 @@ class Solver:
         self.optimizer = optimizer
 
         self.loss_history = []
-        self.weight_history = [1]
+        self.weight_history = [{cond.name: 1. for cond in bvp.get_conditions()}]
         self.weights = None
         self.step = None
 
@@ -247,15 +247,14 @@ class Solver:
             else:
                 iterations_since_last_improvement += 1
             
-            if list(new_weights)[0] != -1:
-                self.weight_history += [new_weights['boundary'].numpy()]
+            if list(new_weights.values())[0] != -1:
+                self.weight_history += [{name: new_weights[name].numpy() for name in new_weights.keys()}]
             
             avg_loss = np.mean(self.loss_history[-100:])
             pbar.desc = f'øloss = {avg_loss:.3e} (best: {best_loss:.3e}, {iterations_since_last_improvement:0{k_max}d}it ago) lr = {self.optimizer.lr.numpy():.5f}'
 
             if debug_frequency > 0 and (i % debug_frequency == 0 or i == iterations - 1):
-                gradients_ = (gradients['inner'], gradients['boundary'])
-                self.show_debugplot(gradients_)
+                self.show_debugplot(gradients)
 
     def show_debugplot(self, gradients):
         """
@@ -280,12 +279,12 @@ class Solver:
             else:
                 ax_count += 1
 
-            layer_gradient = lambda i: tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients[i][2*(j-2):2*(j-1)]], axis=0)
+            layer_gradient = lambda name: tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients[name][2*(j-2):2*(j-1)]], axis=0)
             density = lambda i, x: gaussian_kde(layer_gradient(i).numpy())(x)
 
             xs = np.linspace(-2.5, 2.5, 1000)
-            axs[ax_count].plot(xs, density(0, xs), 'orange', lw=0.5, label='PDE')
-            axs[ax_count].plot(xs, density(1, xs), 'b--', lw=0.5, label='Data')
+            axs[ax_count].plot(xs, density('inner', xs), 'orange', lw=0.5, label='PDE')
+            axs[ax_count].plot(xs, density('boundary', xs), 'b--', lw=0.5, label='Data')
 
             axs[ax_count].set_xlim(min(xs), max(xs))
             axs[ax_count].set_ylim(0, 100)
@@ -302,7 +301,7 @@ class Solver:
         loss_handle, = axs[0].semilogy(range(n), self.loss_history, 'k-', lw=0.5, alpha=0.5, label='Loss')
         avg_loss_handle, = axs[0].semilogy(range(n), averaged_loss, 'r--', lw=1, label=f'$ø_{{{min(100, n)}}}$ Loss')
         axs[0].axhline(best_loss, color='g', lw=0.5)
-        axs[0].text(0.934, 0.97 * best_loss, f'Best: {best_loss:.3e}', ha='left', va='top', color='g', transform=trans)
+        axs[0].text(0.995, 0.97 * best_loss, f'Best: {best_loss:.3e}', ha='right', va='top', color='g', transform=trans)
 
         ax = axs[0].twinx()
         ax.set_yscale('log')
@@ -322,10 +321,15 @@ class Solver:
             handles = [loss_handle, avg_loss_handle, lr_handle]
             axs[0].legend(handles=handles, loc='lower left')
 
-        axs[1].plot(self.weight_history, 'k', lw=0.5)
+        for cond in self.bvp.get_conditions():
+            cond_weight_history = [self.weight_history[k][cond.name] for k in range(len(self.weight_history))]
+            axs[1].plot(cond_weight_history, lw=0.5, label=cond.name)
+
         axs[1].set_title('Weight History')
         axs[1].set_xlabel('Update #')
         axs[1].set_xlim(0, len(self.weight_history) - 1)
+        axs[1].set_yscale('log')
+        axs[1].legend()
 
         figManager = plt.get_current_fig_manager()
         figManager.window.state("zoomed")
