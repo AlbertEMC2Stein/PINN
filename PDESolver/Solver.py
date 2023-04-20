@@ -185,16 +185,15 @@ class Solver:
             name = cond.name
             if i != most_varying:
                 new_weight = most_varying_absmax / (tf.reduce_mean(tf.abs(gradient_vectors[i])))
-                new_weight = 0.75 * self.weights[i] + 0.25 * new_weight
-
-                new_weights[name] = new_weight
-                self.weights[i].assign(new_weight)
+                new_weight = 0.9 * self.weights[i] + 0.1 * new_weight
             else:
-                new_weights[name] = self.weights[i]
+                new_weight = self.weights[i]
 
+            new_weights[name] = new_weight
             minimal = tf.math.minimum(minimal, new_weights[name])
 
         new_weights = {name: new_weights[name] / minimal for name in new_weights.keys()}
+        self.weights.assign([new_weight for new_weight in new_weights.values()])
                 
         return new_weights
     
