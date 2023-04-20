@@ -5,16 +5,29 @@ import tensorflow as tf
 class Specification:
     def __init__(self, components, variables, differentials, stacked_components={}):
         """
-        Class for defining the specification of a boundary value problem.
+        Class for defining the differential specification of a boundary value problem.
 
         Parameters
         -----------
         components: list
-            List of components of the boundary value problem
+            List of names for the output components
         variables: list
-            List of variables of the boundary value problem
+            List of names for the input variables
         differentials: list
-            List of differentials of the boundary value problem
+            List of differentials needed to check the constraints
+        stacked_components: dict
+            Dictionary of stacked components to make constraint formulation easier
+
+        Example
+        -----------
+        Consider the EOM of a simple pendulum using cartesian coordinates:
+        >>> Specification(["x", "y", "lagrange"], # Components of the output
+                          ["t"], # Input variable
+                          ["x_tt", "y_tt"], # Differentials needed to check the constraints
+                          {"u": ["x", "y"], "u_t": ["x_t", "y_t"], "u_tt": ["x_tt", "y_tt"]}) # Stacked components 
+        >>> Condition("algebraic constraint",
+                      lambda Du: tf.reshape(tf.norm(Du["u"], axis=1), (-1, 1))**2 - 1.,
+                      (Cuboid([0], [1]), 128))
         """
 
         self.components = components
