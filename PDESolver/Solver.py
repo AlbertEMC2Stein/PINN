@@ -373,7 +373,7 @@ class Encoder(tf.keras.layers.Layer):
         self.W = xavier_init([self.inputs, self.outputs]) 
         self.b = xavier_init([1, self.outputs])
 
-    def call(self, inputs):  # Defines the computation from inputs to outputs
+    def call(self, inputs):  
         return self.activation(tf.add(tf.matmul(inputs, self.W), self.b))
     
 
