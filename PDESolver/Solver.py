@@ -330,10 +330,10 @@ class Solver:
         axs[1].set_xlabel('Update #')
         axs[1].set_xlim(0, len(self.weight_history) - 1)
         axs[1].set_yscale('log')
-        axs[1].legend()
 
-        figManager = plt.get_current_fig_manager()
-        figManager.window.state("zoomed")
+        if os.name == 'nt':
+            figManager = plt.get_current_fig_manager()
+            figManager.window.state("zoomed")
         
         plt.show()
 
