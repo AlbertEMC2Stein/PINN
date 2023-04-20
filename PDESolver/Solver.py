@@ -136,8 +136,12 @@ class Solver:
         residuals = self.compute_residuals()
 
         losses = {name: 0.0 for name in residuals.keys()}
+        losses['L2'] = 0.0
         for i, (name, residual) in enumerate(residuals.items()):
             losses[name] += self.weights[i] * criterion(residual, 0.0)
+            losses['L2'] += criterion(residual, 0.0)
+
+        losses['total'] = sum(losses.values())
 
         return losses
  
@@ -153,12 +157,11 @@ class Solver:
         with tf.GradientTape(persistent=True) as tape:
             tape.watch(self.model.trainable_variables)
             losses = self.compute_losses()
-            losses['total'] = sum(losses.values())
 
             kwargs = {'sources': self.model.trainable_variables, 'unconnected_gradients': tf.UnconnectedGradients.ZERO}
-            grads = {name: tape.gradient(loss, **kwargs) for name, loss in losses.items()}
+            grads = {name: tape.gradient(loss, **kwargs) for name, loss in losses.items() if name != 'L2'}
 
-        return losses['total'], grads
+        return losses['L2'], grads
 
 
     def adjust_weights(self, gradients):
@@ -210,7 +213,7 @@ class Solver:
             self.step = tf.Variable(0)
             self.weights = tf.Variable(np.ones(len(self.bvp.get_conditions())), dtype=tf.float32)
         
-        loss, gradients = self.compute_gradients()
+        l2loss, gradients = self.compute_gradients()
         
         if self.step % 10 == 0:
             new_weights = self.adjust_weights(gradients)  
@@ -220,7 +223,7 @@ class Solver:
         self.optimizer.apply_gradients(zip(gradients['total'], self.model.trainable_variables))
         self.step.assign(self.step + 1)
         
-        return loss, gradients, new_weights
+        return l2loss, gradients, new_weights
 
     def train(self, iterations=10000, debug_frequency=2500):
         """
@@ -241,12 +244,12 @@ class Solver:
         pbar = tqdm(range(iterations), desc='Pending...')
 
         for i in pbar:
-            loss, gradients, new_weights = self.train_step()
+            l2loss, gradients, new_weights = self.train_step()
             
-            self.loss_history += [loss.numpy()]
+            self.loss_history += [l2loss.numpy()]
             
-            if loss.numpy() < best_loss:
-                best_loss = loss.numpy()
+            if l2loss.numpy() < best_loss:
+                best_loss = l2loss.numpy()
                 iterations_since_last_improvement = 0
             else:
                 iterations_since_last_improvement += 1
@@ -255,7 +258,7 @@ class Solver:
                 self.weight_history += [{name: new_weights[name].numpy() for name in new_weights.keys()}]
             
             avg_loss = np.mean(self.loss_history[-100:])
-            pbar.desc = f'øloss = {avg_loss:.3e} (best: {best_loss:.3e}, {iterations_since_last_improvement:0{k_max}d}it ago) lr = {self.optimizer.lr.numpy():.5f}'
+            pbar.desc = f'øL²-loss = {avg_loss:.3e} (best: {best_loss:.3e}, {iterations_since_last_improvement:0{k_max}d}it ago) lr = {self.optimizer.lr.numpy():.5f}'
 
             if debug_frequency > 0 and (i % debug_frequency == 0 or i == iterations - 1):
                 self.show_debugplot(gradients)
