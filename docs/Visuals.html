@@ -302,7 +302,7 @@ def plot_2Dvectorfield(solver):
     animate_solution()
 
 
-def plot_phaseplot(solver):
+def plot_phaseplot(solver, t_start=0, t_end=2, N=500):
     &#34;&#34;&#34;
     Plots the solution of a DAE defined in one temporal dimension and two spacial outputs.
 
@@ -313,19 +313,19 @@ def plot_phaseplot(solver):
     &#34;&#34;&#34;
 
     def animate_solution():
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(5, 5))
 
-        tspace = tf.linspace([0], [10], 600, axis=0)
+        tspace = tf.linspace([t_start], [t_end], N, axis=0)
         xy = solver.model(tspace)
         xd, yd = xy[:, 0].numpy(), xy[:, 1].numpy()
         pendulum, = plt.plot([], [], &#39;lightgray&#39;)
         ln, = plt.plot([], [], &#39;cornflowerblue&#39;)
         sc, = plt.plot([], [], &#39;bo&#39;, markersize=10)
-        title = ax.text(0, 0.1, &#34;&#34;, ha=&#39;center&#39;)
+        title = ax.text(0, 1.15, &#34;&#34;, ha=&#39;center&#39;)
 
         def init():
             ax.set_xlim(-1.25, 1.25)
-            ax.set_ylim(-1.25, 0.25)
+            ax.set_ylim(-1.25, 1.25)
             return ln, sc, pendulum, title
 
         def update(frame):
@@ -334,11 +334,11 @@ def plot_phaseplot(solver):
             pendulum.set_data([0, xd[frame]], [0, yd[frame]])
             ln.set_data(xd[start:frame+1], yd[start:frame+1])
             sc.set_data(xd[frame], yd[frame])
-            title.set_text(u&#34;t = {:.3f}&#34;.format(frame))
+            title.set_text(u&#34;t = {:.3f}&#34;.format(t_start + (t_end - t_start) * frame / N))
 
             return ln, sc, pendulum, title
 
-        anim = FuncAnimation(fig, update, frames=np.arange(len(tspace)),
+        anim = FuncAnimation(fig, update, frames=len(tspace),
                             init_func=init, blit=True, interval=16)
 
         anim.save(&#34;../out/%s_solution.gif&#34; % solver.bvp.__class__.__name__, fps=60)
@@ -732,7 +732,7 @@ def error_plot_2D(solver, exact_solution, variables, domain, heatmap=True):
 </details>
 </dd>
 <dt id="PDESolver.Visuals.plot_phaseplot"><code class="name flex">
-<span>def <span class="ident">plot_phaseplot</span></span>(<span>solver)</span>
+<span>def <span class="ident">plot_phaseplot</span></span>(<span>solver, t_start=0, t_end=2, N=500)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Plots the solution of a DAE defined in one temporal dimension and two spacial outputs.</p>
@@ -745,7 +745,7 @@ def error_plot_2D(solver, exact_solution, variables, domain, heatmap=True):
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def plot_phaseplot(solver):
+<pre><code class="python">def plot_phaseplot(solver, t_start=0, t_end=2, N=500):
     &#34;&#34;&#34;
     Plots the solution of a DAE defined in one temporal dimension and two spacial outputs.
 
@@ -756,19 +756,19 @@ def error_plot_2D(solver, exact_solution, variables, domain, heatmap=True):
     &#34;&#34;&#34;
 
     def animate_solution():
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(5, 5))
 
-        tspace = tf.linspace([0], [10], 600, axis=0)
+        tspace = tf.linspace([t_start], [t_end], N, axis=0)
         xy = solver.model(tspace)
         xd, yd = xy[:, 0].numpy(), xy[:, 1].numpy()
         pendulum, = plt.plot([], [], &#39;lightgray&#39;)
         ln, = plt.plot([], [], &#39;cornflowerblue&#39;)
         sc, = plt.plot([], [], &#39;bo&#39;, markersize=10)
-        title = ax.text(0, 0.1, &#34;&#34;, ha=&#39;center&#39;)
+        title = ax.text(0, 1.15, &#34;&#34;, ha=&#39;center&#39;)
 
         def init():
             ax.set_xlim(-1.25, 1.25)
-            ax.set_ylim(-1.25, 0.25)
+            ax.set_ylim(-1.25, 1.25)
             return ln, sc, pendulum, title
 
         def update(frame):
@@ -777,11 +777,11 @@ def error_plot_2D(solver, exact_solution, variables, domain, heatmap=True):
             pendulum.set_data([0, xd[frame]], [0, yd[frame]])
             ln.set_data(xd[start:frame+1], yd[start:frame+1])
             sc.set_data(xd[frame], yd[frame])
-            title.set_text(u&#34;t = {:.3f}&#34;.format(frame))
+            title.set_text(u&#34;t = {:.3f}&#34;.format(t_start + (t_end - t_start) * frame / N))
 
             return ln, sc, pendulum, title
 
-        anim = FuncAnimation(fig, update, frames=np.arange(len(tspace)),
+        anim = FuncAnimation(fig, update, frames=len(tspace),
                             init_func=init, blit=True, interval=16)
 
         anim.save(&#34;../out/%s_solution.gif&#34; % solver.bvp.__class__.__name__, fps=60)
