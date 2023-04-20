@@ -297,7 +297,8 @@ class Solver:
             axs[ax_count].set_ylim(0, 100)
             axs[ax_count].set_yscale('symlog')
             axs[ax_count].set_title(self.model.layers[j].name)
-            axs[ax_count].legend()
+        
+        axs[-1].legend()
 
         n = len(self.loss_history)
         averaged_loss = [np.mean(self.loss_history[:k+1] if k < 99 else self.loss_history[k-99:k+1]) for k in range(n)]
@@ -324,7 +325,7 @@ class Solver:
 
         for cond in self.bvp.get_conditions():
             cond_weight_history = [self.weight_history[k][cond.name] for k in range(len(self.weight_history))]
-            axs[1].plot(cond_weight_history, lw=0.5, label=cond.name)
+            axs[1].plot(cond_weight_history, lw=0.5)
 
         axs[1].set_title('Weight History')
         axs[1].set_xlabel('Update #')
