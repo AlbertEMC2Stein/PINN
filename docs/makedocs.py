@@ -3,9 +3,12 @@ from os.path import sep
 
 if __name__ == "__main__":
     if os.getcwd().split(sep)[-1] != "docs":
-        raise PermissionError("Run this script from the docs folder.")
+        try:
+            os.chdir("docs")
+        except FileNotFoundError:
+            print("Please run this script from the root directory of the project.")
+            exit()
     
-
     pycmd = input("Enter the command to run python: ")
     os.system(pycmd.strip() + " -m pdoc --html --config latex_math=True --output-dir . .." + sep + "PDESolver")
 

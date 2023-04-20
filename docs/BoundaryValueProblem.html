@@ -42,6 +42,7 @@ class Specification:
             List of names for the output components
         variables: list
             List of names for the input variables
+            Remark: As of right now only single character variables are supported
         differentials: list
             List of differentials needed to check the constraints
         stacked_components: dict
@@ -50,13 +51,14 @@ class Specification:
         Example
         -----------
         Consider the EOM of a simple pendulum using cartesian coordinates:
+
         &gt;&gt;&gt; Specification([&#34;x&#34;, &#34;y&#34;, &#34;lagrange&#34;], # Components of the output
-                          [&#34;t&#34;], # Input variable
-                          [&#34;x_tt&#34;, &#34;y_tt&#34;], # Differentials needed to check the constraints
-                          {&#34;u&#34;: [&#34;x&#34;, &#34;y&#34;], &#34;u_t&#34;: [&#34;x_t&#34;, &#34;y_t&#34;], &#34;u_tt&#34;: [&#34;x_tt&#34;, &#34;y_tt&#34;]}) # Stacked components 
+        ...               [&#34;t&#34;], # Input variable
+        ...               [&#34;x_tt&#34;, &#34;y_tt&#34;], # Differentials needed to check the constraints
+        ...               {&#34;u&#34;: [&#34;x&#34;, &#34;y&#34;], &#34;u_t&#34;: [&#34;x_t&#34;, &#34;y_t&#34;], &#34;u_tt&#34;: [&#34;x_tt&#34;, &#34;y_tt&#34;]}) # Stacked components 
         &gt;&gt;&gt; Condition(&#34;algebraic constraint&#34;,
-                      lambda Du: tf.reshape(tf.norm(Du[&#34;u&#34;], axis=1), (-1, 1))**2 - 1.,
-                      (Cuboid([0], [1]), 128))
+        ...           lambda Du: tf.reshape(tf.norm(Du[&#34;u&#34;], axis=1), (-1, 1))**2 - 1.,
+        ...           (Cuboid([0], [1]), 128))
         &#34;&#34;&#34;
 
         self.components = components
@@ -70,7 +72,7 @@ class Specification:
 
         Returns
         -----------
-        dict: Specification of form {&#34;components&#34;: [str], &#34;variables&#34;: [str], &#34;differentials&#34;: [str], &#34;stacked_components&#34;: {str: [str]}
+        dict: {&#34;components&#34;: [str], &#34;variables&#34;: [str], &#34;differentials&#34;: [str], &#34;stacked_components&#34;: {str: [str]}
         &#34;&#34;&#34;
 
         return {&#34;components&#34;: self.components, &#34;variables&#34;: self.variables, &#34;differentials&#34;: self.differentials, &#34;stacked_components&#34;: self.stacked_components}
@@ -79,18 +81,30 @@ class Specification:
 class Condition:
     def __init__(self, name, residue_fn, region_samples_pair, sampler=Random()):
         &#34;&#34;&#34;
-        Class for defining conditions for boundary value problems.
+        Class for defining a boundary value problem condition/constraint.
 
         Parameters
         -----------
         name: str
             Name of the condition
-        residue_fn: dict ⟼ tensor
-            Function that calculates the residue of the condition
+        residue_fn: function
+            Function that takes in a dictionary of differentials and returns the residue
         region_samples_pair: tuple
-            Tuple of (region, number of samples)
+            Tuple of (Region, int) where the Region is the region where the condition is applied and the int is the number of samples to take from the region
         sampler: Sampler
-            Sampler to use for sampling points in the region
+            Sampler to use for sampling from the region
+
+        Example
+        -----------
+        &gt;&gt;&gt; Condition(&#34;Laplace&#34;, # Name of the condition
+        ...           lambda Du: Du[&#34;u_xx&#34;] + Du[&#34;u_yy&#34;], # Residue function
+        ...           (Cuboid([0, 0], [1, 1]), 128), # Unit square together with number of samples
+        ...           sampler=Random()) # Random sampler
+
+        &gt;&gt;&gt; Condition(&#34;HeatEquation&#34;, # Name of the condition
+        ...           lambda Du: Du[&#34;u_t&#34;] - Du[&#34;u_xx&#34;], # Residue function
+        ...           (Cuboid([0, 0], [1, 1]), 128), # Unit square together with number of samples
+        ...           sampler=Random()) # Random sampler
         &#34;&#34;&#34;
 
         self.name = name
@@ -127,13 +141,14 @@ class Condition:
 
 
 class BoundaryValueProblem:
-    &#34;&#34;&#34;
-    Class for defining boundary value problems.
-    &#34;&#34;&#34;
-
     def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a BoundaryValueProblem.
+        Class for defining a boundary value problem.
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
         self.conditions = None
@@ -154,349 +169,423 @@ class BoundaryValueProblem:
     def get_specification(self):
         &#34;&#34;&#34;
         Returns the specification of the boundary value problem.
-        Right now, variables are only allowed to be single characters.
 
         Returns
         -----------
-        dict: Specification of form {&#34;components&#34;: [str], &#34;variables&#34;: [str], &#34;differentials&#34;: [str]}
+        dict: Specification of the boundary value problem
         &#34;&#34;&#34;
 
         return self.specification.as_dictionary()
 
 
 class Laplace(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the Laplace equation in 2D as a boundary value problem.
-
-    (x, y) ⟼ z
-    &#34;&#34;&#34;
-
-    def __init__(self):
+    def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a Laplace equation.
+        Class defining the Laplace equation ( \\(\\Omega = [0, 1]^2 \\) ).
+        \\begin{alignat}{2}
+            \\Delta u &amp;= 0 \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(x, y) &amp;= 0 \\quad &amp;&amp;\\forall (x, y) \\in \\Gamma_S \\cup \\Gamma_W \\cup \\Gamma_E \\newline
+            u(x, y) &amp;= 2x(1 - x) \\quad &amp;&amp;\\forall (x, y) \\in \\Gamma_N
+        \\end{alignat}
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
  
         self.conditions = [
             Condition(&#34;zero_boundary&#34;,
                       lambda Du: Du[&#34;u&#34;],
-                      (Cuboid([0, 0], [0, 1]) &amp; Cuboid([0, 0], [1, 0]) &amp; Cuboid([1, 0], [1, 1]), 128)),
+                      (Cuboid([0, 0], [0, 1]) &amp; Cuboid([0, 0], [1, 0]) &amp; Cuboid([1, 0], [1, 1]), minibatch_size)),
 
             Condition(&#34;f_boundary&#34;,
                       # tf.where(tf.abs(Du[&#34;x&#34;] - 0.5) &lt; 0.25, 1., 0.),
                       lambda Du: Du[&#34;u&#34;] - 2 * Du[&#34;x&#34;] * (1 - Du[&#34;x&#34;]),
-                      (Cuboid([0, 1], [1, 1]), 128)),
+                      (Cuboid([0, 1], [1, 1]), minibatch_size)),
 
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_xx&#34;] + Du[&#34;u_yy&#34;],
-                      (Cuboid([0, 0], [1, 1]), 128))
+                      (Cuboid([0, 0], [1, 1]), minibatch_size))
         ]
 
         self.specification = Specification([&#34;u&#34;], [&#34;x&#34;, &#34;y&#34;], [&#34;u_xx&#34;, &#34;u_yy&#34;])
 
 
 class WaveEquation1D(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the 1D wave equation as a boundary value problem.
-
-    (t, x) ⟼ y
-    &#34;&#34;&#34;
-
     def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a 1D wave equation.
+        Class defining the wave equation in one spatial dimension ( \\(\\Omega = [0, 1] \\times [-1, 1]\\) ).
+        \\begin{alignat}{2}
+            u_{tt} &amp;= u_{xx} \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0, x) &amp;= \\exp(-25x^2) \\quad &amp;&amp;\\forall x \\in [-1, 1] \\newline
+            u_{t}(0, x) &amp;= 0 \\quad &amp;&amp;\\forall x \\in [-1, 1]
+        \\end{alignat}
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
         
         self.conditions = [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.exp(-25 * Du[&#34;x&#34;]**2), #1 / (200*(Du[&#34;x&#34;] + 0.5) ** 2 + 1) - 1 / (200*(Du[&#34;x&#34;] - 0.5)**2 + 2),
-                      (Cuboid([0, -1], [0, 1]), None)),
+                      (Cuboid([0, -1], [0, 1]), minibatch_size)),
             Condition(&#34;boundary1&#34;,
                       lambda Du: Du[&#34;u_t&#34;],
-                      (Cuboid([0, -1], [0, 1]), None)),
+                      (Cuboid([0, -1], [0, 1]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_tt&#34;] - Du[&#34;u_xx&#34;],
-                      (Cuboid([0, -1], [1, 1]), None))
+                      (Cuboid([0, -1], [1, 1]), minibatch_size))
         ]
 
         self.specification = Specification([&#34;u&#34;], [&#34;t&#34;, &#34;x&#34;], [&#34;u_tt&#34;, &#34;u_xx&#34;])
 
 
 class WaveEquation2D(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the 2D wave equation as a boundary value problem.
-
-    (t, x, y) ⟼ z
-    &#34;&#34;&#34;
-
-    def __init__(self):
+    def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a 2D wave equation.
+        Class defining the wave equation in two spatial dimensions ( \\(\\Omega = [0, 1] \\times [-2, 2]^2\\) ).
+        \\begin{alignat}{2}
+            u_{tt} &amp;= u_{xx} \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0, x, y) &amp;= \\exp(-x^2 - y^2)^4 \\quad &amp;&amp;\\forall (x, y) \\in [-2, 2]^2 \\newline
+            u_{t}(0, x, y) &amp;= 0 \\quad &amp;&amp;\\forall (x, y) \\in [-2, 2]^2
+        \\end{alignat}
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
 
         self.conditions = [
             Condition(&#34;initial_u&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.exp(-Du[&#34;x&#34;] ** 2 - Du[&#34;y&#34;] ** 2) ** 4,
-                      (Cuboid([0, -2, -2], [0, 2, 2]), 512)),
+                      (Cuboid([0, -2, -2], [0, 2, 2]), minibatch_size)),
+            Condition(&#34;initial_u&#34;,
+                      lambda Du: Du[&#34;u_t&#34;],
+                      (Cuboid([0, -2, -2], [0, 2, 2]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_tt&#34;] - Du[&#34;u_xx&#34;] - Du[&#34;u_yy&#34;],
-                      (Cuboid([0, -2, -2], [2, 2, 2]), 512))
+                      (Cuboid([0, -2, -2], [2, 2, 2]), minibatch_size))
         ]
 
         self.specification = Specification([&#34;u&#34;], [&#34;t&#34;, &#34;x&#34;, &#34;y&#34;], [&#34;u_tt&#34;, &#34;u_xx&#34;, &#34;u_yy&#34;])
 
 
 class HeatEquation1D(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the 1D heat equation as a boundary value problem.
-
-    (t, x) ⟼ y
-    &#34;&#34;&#34;
-
-    def __init__(self):
+    def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a 1D heat equation.
+        Class defining the heat equation in one spatial dimension ( \\(\\Omega = [0, 1]^2\\) ).
+
+        \\begin{alignat}{2}
+            u_{t} &amp;= \\frac{1}{8} u_{xx} \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0, x) &amp;= 8x^2 (1 - x)^2 \\quad &amp;&amp;\\forall x \\in [0, 1] \\newline
+            u_{x}(t, x) &amp;= 0 \\quad &amp;&amp;\\forall (t, x) \\in [0, 1] \\times \\lbrace 0, 1 \\rbrace
+        \\end{alignat}
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
 
         self.conditions = [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - 8*Du[&#34;x&#34;]**2 * (1 - Du[&#34;x&#34;])**2,
-                      (Cuboid([0, 0], [0, 1]), 100)),
+                      (Cuboid([0, 0], [0, 1]), minibatch_size)),
             Condition(&#34;boundary&#34;,
                       lambda Du: Du[&#34;u_x&#34;],
-                      (Cuboid([0, 0], [1, 0]) &amp; Cuboid([0, 1], [1, 1]), 100)),
+                      (Cuboid([0, 0], [1, 0]) &amp; Cuboid([0, 1], [1, 1]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] - 0.125 * Du[&#34;u_xx&#34;],
-                      (Cuboid([0, 0], [1, 1]), 1600))
+                      (Cuboid([0, 0], [1, 1]), minibatch_size))
         ]
 
         self.specification = Specification([&#34;u&#34;], [&#34;t&#34;, &#34;x&#34;], [&#34;u_t&#34;, &#34;u_xx&#34;])
 
 
 class HeatEquation2D(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the 2D heat equation as a boundary value problem.
-
-    (t, x, y) ⟼ z
-    &#34;&#34;&#34;
-
-    def __init__(self):
+    def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a 2D heat equation.
+        Class defining the heat equation in two spatial dimensions ( \\(\\Omega = [0, 1] \\times [-2, 2]^2\\) ).
+
+        \\begin{alignat}{2}
+            u_{t} &amp;= u_{xx} + u_{yy} \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0, x, y) &amp;= \\exp(-x^2 - y^2)^2 \\quad &amp;&amp;\\forall (x, y) \\in [-2, 2]^2
+        \\end{alignat}
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
 
         self.conditions = [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.exp(-Du[&#34;x&#34;] ** 2 - Du[&#34;y&#34;] ** 2) ** 2,
-                      (Cuboid([0, -2, -2], [0, 2, 2]), 400)),
+                      (Cuboid([0, -2, -2], [0, 2, 2]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] - Du[&#34;u_xx&#34;] - Du[&#34;u_yy&#34;],
-                      (Cuboid([0, -2, -2], [2, 2, 2]), 3600))
+                      (Cuboid([0, -2, -2], [2, 2, 2]), minibatch_size))
         ]
 
         self.specification = Specification([&#34;u&#34;], [&#34;t&#34;, &#34;x&#34;, &#34;y&#34;], [&#34;u_t&#34;, &#34;u_xx&#34;, &#34;u_yy&#34;])
 
 
 class BurgersEquation(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the Burgers equation as a boundary value problem.
-
-    (t, x) ⟼ y
-    &#34;&#34;&#34;
-
-    def __init__(self, viscosity=0.01):
+    def __init__(self, viscosity=0.01, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a Burgers equation.
+        Class defining the Burgers equation in one spatial dimension ( \\(\\Omega = [0, 1] \\times [-1, 1]\\) ).
+
+        \\begin{alignat}{2}
+            u_{t} + u u_{x} &amp;= \\frac{\\nu}{\\pi} u_{xx} \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0, x) &amp;= -\\sin(\\pi x) \\quad &amp;&amp;\\forall x \\in [-1, 1] \\newline
+            u(t, x) &amp;= 0 \\quad &amp;&amp;\\forall (t, x) \\in [0, 1] \\times \\lbrace -1, 1 \\rbrace
+        \\end{alignat}
+
+        Parameters
+        -----------
+        viscosity: float
+            Viscosity parameter
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
         self.viscosity = viscosity
 
         self.conditions = [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] + tf.sin(np.pi * Du[&#34;x&#34;]),
-                      (Cuboid([0, -1], [0, 1]), 128)),
+                      (Cuboid([0, -1], [0, 1]), minibatch_size)),
             Condition(&#34;boundary&#34;,
                       lambda Du: Du[&#34;u&#34;],
-                      (Cuboid([0, -1], [1, -1]) &amp; Cuboid([0, 1], [1, 1]), 128)),
+                      (Cuboid([0, -1], [1, -1]) &amp; Cuboid([0, 1], [1, 1]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] + Du[&#34;u&#34;] * Du[&#34;u_x&#34;] - self.viscosity / np.pi * Du[&#34;u_xx&#34;],
-                      (Cuboid([0, -1], [1, 1]), 128))
+                      (Cuboid([0, -1], [1, 1]), minibatch_size))
         ]
         
         self.specification = Specification([&#34;u&#34;], [&#34;t&#34;, &#34;x&#34;], [&#34;u_t&#34;, &#34;u_xx&#34;])
 
 
 class VanDerPolEquation(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the Van-der-Pol equation as a boundary value problem.
-
-    (t, x) ⟼ y
-    &#34;&#34;&#34;
-
-    def __init__(self):
+    def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a Van-der-Pol equation.
+        Class defining the Van der Pol equation with varying \\(\\mu\\) ( \\(\\Omega = [0, 4] \\times [0, 10]\\) ).
+
+        \\begin{alignat}{2}
+            u_{xx} - t(1 - u^2)u_{x} + u &amp;= 0 \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0, x) &amp;= \\cos(x) \\quad &amp;&amp;\\forall x \\in [0, 10] \\newline
+            u(t, 0) &amp;= 1 \\quad &amp;&amp;\\forall t \\in [0, 4] \\newline
+            u_{x}(t, 0) &amp;= 0 \\quad &amp;&amp;\\forall t \\in [0, 4]
+        \\end{alignat}
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
 
         self.conditions = [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - 1,
-                      (Cuboid([0, 0], [4, 0]), 200)),
+                      (Cuboid([0, 0], [4, 0]), minibatch_size)),
             Condition(&#34;boundary&#34;,
                       lambda Du: Du[&#34;u_x&#34;],
-                      (Cuboid([0, 0], [4, 0]), 200)),
+                      (Cuboid([0, 0], [4, 0]), minibatch_size)),
             Condition(&#34;helper&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.cos(Du[&#34;x&#34;]),
-                      (Cuboid([0, 0], [0, 10]), 200)),
+                      (Cuboid([0, 0], [0, 10]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_xx&#34;] - Du[&#34;t&#34;] * (1 - Du[&#34;u&#34;] ** 2) * Du[&#34;u_x&#34;] + Du[&#34;u&#34;],
-                      (Cuboid([0, 0], [4, 10]), 3000))
+                      (Cuboid([0, 0], [4, 10]), minibatch_size))
         ]
         
         self.specification = Specification([&#34;u&#34;], [&#34;t&#34;, &#34;x&#34;], [&#34;u_xx&#34;])
 
 
 class AllenCahnEquation(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the Allen-Cahn equation as a boundary value problem.
-
-    (t, x) ⟼ y
-    &#34;&#34;&#34;
-
-    def __init__(self):
+    def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a Allen-Cahn equation.
+        Class defining the Allen-Cahn equation in one spatial dimension ( \\(\\Omega = [0, 1] \\times [-1, 1]\\) ).
+
+        \\begin{alignat}{2}
+            u_{t} &amp;= 0.0001u_{xx} - 5(u^3 - u) \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0, x) &amp;= -x^2\\cos(\\pi x) \\quad &amp;&amp;\\forall x \\in [-1, 1] \\newline
+            u(t, x) &amp;= -1 \\quad &amp;&amp;\\forall (t, x) \\in [0, 1] \\times \\lbrace -1, 1 \\rbrace \\newline
+            u_{x}(t, x) &amp;= 0 \\quad &amp;&amp;\\forall (t, x) \\in [0, 1] \\times \\lbrace -1, 1 \\rbrace \\newline
+            u(t, 0) &amp;= 0 \\quad &amp;&amp;\\forall t \\in [0, 1]
+        \\end{alignat}
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+
+        super().__init__(minibatch_size)
 
         self.conditions = [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - Du[&#34;x&#34;] ** 2 * tf.cos(np.pi * Du[&#34;x&#34;]),
-                      (Cuboid([0, -1], [0, 1]), 100)),
+                      (Cuboid([0, -1], [0, 1]), minibatch_size)),
             Condition(&#34;boundary1&#34;,
                       lambda Du: Du[&#34;u&#34;] + 1,
-                      (Cuboid([0, -1], [1, -1]) &amp; Cuboid([0, 1], [1, 1]), 200)),
+                      (Cuboid([0, -1], [1, -1]) &amp; Cuboid([0, 1], [1, 1]), minibatch_size)),
             Condition(&#34;boundary2&#34;,
                       lambda Du: Du[&#34;u_x&#34;],
-                      (Cuboid([0, -1], [1, -1]) &amp; Cuboid([0, 1], [1, 1]), 200)),
+                      (Cuboid([0, -1], [1, -1]) &amp; Cuboid([0, 1], [1, 1]), minibatch_size)),
             Condition(&#34;center&#34;,
                       lambda Du: Du[&#34;u&#34;],
-                      (Cuboid([0, 0], [1, 0]), 100)),
+                      (Cuboid([0, 0], [1, 0]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] - 0.0001 * Du[&#34;u_xx&#34;] + 5 * (Du[&#34;u&#34;] ** 3 - Du[&#34;u&#34;]),
-                      (Cuboid([0, -1], [1, 1]), 2500))
+                      (Cuboid([0, -1], [1, 1]), minibatch_size))
         ]
 
         self.specification = Specification([&#34;u&#34;], [&#34;t&#34;, &#34;x&#34;], [&#34;u_t&#34;, &#34;u_xx&#34;])
 
 
 class KortewegDeVriesEquation(BoundaryValueProblem):
-    &#34;&#34;&#34;
-        Class defining the KortewegDeVriesEquation equation.
-
-        (t, x) ⟼ y
-    &#34;&#34;&#34;
-
-    def __init__(self):
+    def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a KortewegDeVriesEquation equation.
+        Class defining the Korteweg-de Vries equation in one spatial dimension ( \\(\\Omega = [0, 1] \\times [-1, 1]\\) ).
+
+        \\begin{alignat}{2}
+            u_{t} - 6u u_{x} - u_{xxx} &amp;= 0\\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0, x) &amp;= \\cos(\\pi x) \\quad &amp;&amp;\\forall x \\in [-1, 1]
+        \\end{alignat}
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
 
         self.conditions = [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.cos(np.pi * Du[&#34;x&#34;]),
-                      (Cuboid([0, -1], [0, 1]), 128)),
+                      (Cuboid([0, -1], [0, 1]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] + 6 * Du[&#34;u&#34;] * Du[&#34;u_x&#34;] + Du[&#34;u_xxx&#34;],
-                      (Cuboid([0, -1], [1, 1]), 128))
+                      (Cuboid([0, -1], [1, 1]), minibatch_size))
         ]
 
         self.specification = Specification([&#34;u&#34;], [&#34;t&#34;, &#34;x&#34;], [&#34;u_t&#34;, &#34;u_xxx&#34;])
 
 
 class ConvectionDiffusionEquation(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the Convection-Diffusion equation as a boundary value problem.
-
-    (t, x) ⟼ y
-    &#34;&#34;&#34;
-
-    def __init__(self):
+    def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a Convection-Diffusion equation.
+        Class defining the convection-diffusion equation in one spatial dimension ( \\(\\Omega = [0, 1] \\times [-0.5, 1]\\) ).
+
+        \\begin{alignat}{2}
+            u_{t} &amp;= 0.1u_{xx} - u_{x} \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0, x) &amp;= \\exp(-25x^2) \\quad &amp;&amp;\\forall x \\in [-0.5, 1]
+        \\end{alignat}
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
 
         self.conditions = [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.exp(-25 * Du[&#34;x&#34;]**2),
-                      (Cuboid([0, -0.5], [0, 1]), 100)),
+                      (Cuboid([0, -0.5], [0, 1]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] + Du[&#34;u_x&#34;] - 0.1 * Du[&#34;u_xx&#34;],
-                      (Cuboid([0, -0.5], [1, 1]), 1000))
+                      (Cuboid([0, -0.5], [1, 1]), minibatch_size))
         ]
 
         self.specification = Specification([&#34;u&#34;], [&#34;t&#34;, &#34;x&#34;], [&#34;u_t&#34;, &#34;u_xx&#34;])
 
 
 class MinimalSurfaceEquation(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the minimal surface equation as a boundary value problem.
-
-    (x, y) ⟼ z
-    &#34;&#34;&#34;
-
-    def __init__(self):
+    def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a minimal surface equation.
+        Class defining the minimal surface equation in two spatial dimensions ( \\(\\Omega = [0, 1] \\times [-1, 1]\\) ).
+
+        \\begin{alignat}{2}
+            (1 + u_{x}^2)u_{yy} - 2u_{y}u_{x}u_{xy} + (1 + u_{y}^2)u_{xx} &amp;= 0\\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0, x) &amp;= x \\quad &amp;&amp;\\forall x \\in [-1, 1] \\newline
+            u(1, x) &amp;= -x \\quad &amp;&amp;\\forall x \\in [-1, 1] \\newline
+        \\end{alignat}
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
+
         self.conditions = [
             Condition(&#34;boundary1&#34;,
                       lambda Du: Du[&#34;u&#34;] - Du[&#34;x&#34;],
-                      (Cuboid([0, -1], [0, 1]), 50)),
+                      (Cuboid([0, -1], [0, 1]), minibatch_size)),
             Condition(&#34;boundary2&#34;,
                       lambda Du: Du[&#34;u&#34;] + Du[&#34;x&#34;],
-                      (Cuboid([1, -1], [1, 1]), 50)),
+                      (Cuboid([1, -1], [1, 1]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: (1 + Du[&#34;u_x&#34;] ** 2) * Du[&#34;u_yy&#34;] - 2 * Du[&#34;u_y&#34;] * Du[&#34;u_x&#34;] * Du[&#34;u_xy&#34;] + (
                               1 + Du[&#34;u_y&#34;] ** 2) * Du[&#34;u_xx&#34;],
-                      (Cuboid([0, -1], [1, 1]), 500))
+                      (Cuboid([0, -1], [1, 1]), minibatch_size))
         ]
 
         self.specification = Specification([&#34;u&#34;], [&#34;x&#34;, &#34;y&#34;], [&#34;u_xx&#34;, &#34;u_yy&#34;, &#34;u_xy&#34;])
 
 
 class Pendulum(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the differential algebraic equation for a pendulum.
-
-    t ⟼ (x_1, x_2, lambda)
-    &#34;&#34;&#34;
-
-    def __init__(self, init_pos=[1, 0], init_vel=[0, 0], gravity=1.5, t_start=0, t_end=2, mini_batch=128):
+    def __init__(self, init_pos=[1, 0], init_vel=[0, 0], gravity=1.5, t_start=0, t_end=2, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a pendulum.
+        Class defining the EOM for the simple pendulum ( \\(\\Omega = [T_0, T_1]\\) ).
+
+        \\begin{alignat}{2}
+            u_{tt} &amp;= -\\lambda u - (0, g)^\\top \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            \\Vert u \\Vert_2^2 &amp;= 1 \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0) &amp;= p_0 \\newline
+            u_{t}(0) &amp;= v_0 \\newline
+        \\end{alignat}
+
+        Parameters
+        -----------
+        init_pos: list
+            Initial position of the pendulum
+        init_vel: list
+            Initial velocity of the pendulum
+        gravity: float
+            Gravity constant    
+        t_start: float
+            Start time
+        t_end: float
+            End time
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
 
         initPos = lambda t: tf.concat([0*t + init_pos[0], 0*t + init_pos[1]], axis=1)
         initVel = lambda t: tf.concat([0*t + init_vel[0], 0*t + init_vel[1]], axis=1)
@@ -505,16 +594,16 @@ class Pendulum(BoundaryValueProblem):
         self.conditions = [
             Condition(&#34;initialPos&#34;,
                       lambda Du: Du[&#34;u&#34;] - initPos(Du[&#34;t&#34;]),
-                      (Cuboid([t_start], [t_start]), mini_batch)),
+                      (Cuboid([t_start], [t_start]), minibatch_size)),
             Condition(&#34;initialVel&#34;,
                       lambda Du: Du[&#34;u_t&#34;] - initVel(Du[&#34;t&#34;]),
-                      (Cuboid([t_start], [t_start]), mini_batch)),
+                      (Cuboid([t_start], [t_start]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_tt&#34;] - ode(Du[&#34;u&#34;], Du[&#34;t&#34;], Du[&#34;lagrange&#34;]),
-                      (Cuboid([t_start], [t_end]), mini_batch)),
+                      (Cuboid([t_start], [t_end]), minibatch_size)),
             Condition(&#34;constraint&#34;,
                       lambda Du: tf.reshape(tf.norm(Du[&#34;u&#34;], axis=1), (-1, 1))**2 - 1.,
-                      (Cuboid([t_start], [t_end]), mini_batch))
+                      (Cuboid([t_start], [t_end]), minibatch_size))
         ]
 
         self.specification = Specification([&#34;x&#34;, &#34;y&#34;, &#34;lagrange&#34;], [&#34;t&#34;], [&#34;x_tt&#34;, &#34;y_tt&#34;], 
@@ -532,45 +621,64 @@ class Pendulum(BoundaryValueProblem):
 <dl>
 <dt id="PDESolver.BoundaryValueProblem.AllenCahnEquation"><code class="flex name class">
 <span>class <span class="ident">AllenCahnEquation</span></span>
+<span>(</span><span>minibatch_size=128)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class defining the Allen-Cahn equation as a boundary value problem.</p>
-<p>(t, x) ⟼ y</p>
-<p>Constructor for a Allen-Cahn equation.</p></div>
+<div class="desc"><p>Class defining the Allen-Cahn equation in one spatial dimension ( <span><span class="MathJax_Preview">\Omega = [0, 1] \times [-1, 1]</span><script type="math/tex">\Omega = [0, 1] \times [-1, 1]</script></span> ).</p>
+<p>\begin{alignat}{2}
+u_{t} &amp;= 0.0001u_{xx} - 5(u^3 - u) \quad &amp;&amp;\text{in } \Omega \newline
+u(0, x) &amp;= -x^2\cos(\pi x) \quad &amp;&amp;\forall x \in [-1, 1] \newline
+u(t, x) &amp;= -1 \quad &amp;&amp;\forall (t, x) \in [0, 1] \times \lbrace -1, 1 \rbrace \newline
+u_{x}(t, x) &amp;= 0 \quad &amp;&amp;\forall (t, x) \in [0, 1] \times \lbrace -1, 1 \rbrace \newline
+u(t, 0) &amp;= 0 \quad &amp;&amp;\forall t \in [0, 1]
+\end{alignat}</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>minibatch_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>Size of the minibatch to use for training</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class AllenCahnEquation(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the Allen-Cahn equation as a boundary value problem.
-
-    (t, x) ⟼ y
-    &#34;&#34;&#34;
-
-    def __init__(self):
+    def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a Allen-Cahn equation.
+        Class defining the Allen-Cahn equation in one spatial dimension ( \\(\\Omega = [0, 1] \\times [-1, 1]\\) ).
+
+        \\begin{alignat}{2}
+            u_{t} &amp;= 0.0001u_{xx} - 5(u^3 - u) \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0, x) &amp;= -x^2\\cos(\\pi x) \\quad &amp;&amp;\\forall x \\in [-1, 1] \\newline
+            u(t, x) &amp;= -1 \\quad &amp;&amp;\\forall (t, x) \\in [0, 1] \\times \\lbrace -1, 1 \\rbrace \\newline
+            u_{x}(t, x) &amp;= 0 \\quad &amp;&amp;\\forall (t, x) \\in [0, 1] \\times \\lbrace -1, 1 \\rbrace \\newline
+            u(t, 0) &amp;= 0 \\quad &amp;&amp;\\forall t \\in [0, 1]
+        \\end{alignat}
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+
+        super().__init__(minibatch_size)
 
         self.conditions = [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - Du[&#34;x&#34;] ** 2 * tf.cos(np.pi * Du[&#34;x&#34;]),
-                      (Cuboid([0, -1], [0, 1]), 100)),
+                      (Cuboid([0, -1], [0, 1]), minibatch_size)),
             Condition(&#34;boundary1&#34;,
                       lambda Du: Du[&#34;u&#34;] + 1,
-                      (Cuboid([0, -1], [1, -1]) &amp; Cuboid([0, 1], [1, 1]), 200)),
+                      (Cuboid([0, -1], [1, -1]) &amp; Cuboid([0, 1], [1, 1]), minibatch_size)),
             Condition(&#34;boundary2&#34;,
                       lambda Du: Du[&#34;u_x&#34;],
-                      (Cuboid([0, -1], [1, -1]) &amp; Cuboid([0, 1], [1, 1]), 200)),
+                      (Cuboid([0, -1], [1, -1]) &amp; Cuboid([0, 1], [1, 1]), minibatch_size)),
             Condition(&#34;center&#34;,
                       lambda Du: Du[&#34;u&#34;],
-                      (Cuboid([0, 0], [1, 0]), 100)),
+                      (Cuboid([0, 0], [1, 0]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] - 0.0001 * Du[&#34;u_xx&#34;] + 5 * (Du[&#34;u&#34;] ** 3 - Du[&#34;u&#34;]),
-                      (Cuboid([0, -1], [1, 1]), 2500))
+                      (Cuboid([0, -1], [1, 1]), minibatch_size))
         ]
 
         self.specification = Specification([&#34;u&#34;], [&#34;t&#34;, &#34;x&#34;], [&#34;u_t&#34;, &#34;u_xx&#34;])</code></pre>
@@ -594,20 +702,25 @@ class Pendulum(BoundaryValueProblem):
 <span>(</span><span>minibatch_size=128)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class for defining boundary value problems.</p>
-<p>Constructor for a BoundaryValueProblem.</p></div>
+<div class="desc"><p>Class for defining a boundary value problem.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>minibatch_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>Size of the minibatch to use for training</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class BoundaryValueProblem:
-    &#34;&#34;&#34;
-    Class for defining boundary value problems.
-    &#34;&#34;&#34;
-
     def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a BoundaryValueProblem.
+        Class for defining a boundary value problem.
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
         self.conditions = None
@@ -628,11 +741,10 @@ class Pendulum(BoundaryValueProblem):
     def get_specification(self):
         &#34;&#34;&#34;
         Returns the specification of the boundary value problem.
-        Right now, variables are only allowed to be single characters.
 
         Returns
         -----------
-        dict: Specification of form {&#34;components&#34;: [str], &#34;variables&#34;: [str], &#34;differentials&#34;: [str]}
+        dict: Specification of the boundary value problem
         &#34;&#34;&#34;
 
         return self.specification.as_dictionary()</code></pre>
@@ -684,11 +796,10 @@ class Pendulum(BoundaryValueProblem):
 <span>def <span class="ident">get_specification</span></span>(<span>self)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Returns the specification of the boundary value problem.
-Right now, variables are only allowed to be single characters.</p>
+<div class="desc"><p>Returns the specification of the boundary value problem.</p>
 <h2 id="returns">Returns</h2>
 <dl>
-<dt><strong><code>dict</code></strong> :&ensp;<code><a title="PDESolver.BoundaryValueProblem.Specification" href="#PDESolver.BoundaryValueProblem.Specification">Specification</a></code> of <code>form {"components": [str], "variables": [str], "differentials": [str]}</code></dt>
+<dt><strong><code>dict</code></strong> :&ensp;<code><a title="PDESolver.BoundaryValueProblem.Specification" href="#PDESolver.BoundaryValueProblem.Specification">Specification</a></code> of <code>the boundary value problem</code></dt>
 <dd>&nbsp;</dd>
 </dl></div>
 <details class="source">
@@ -698,11 +809,10 @@ Right now, variables are only allowed to be single characters.</p>
 <pre><code class="python">def get_specification(self):
     &#34;&#34;&#34;
     Returns the specification of the boundary value problem.
-    Right now, variables are only allowed to be single characters.
 
     Returns
     -----------
-    dict: Specification of form {&#34;components&#34;: [str], &#34;variables&#34;: [str], &#34;differentials&#34;: [str]}
+    dict: Specification of the boundary value problem
     &#34;&#34;&#34;
 
     return self.specification.as_dictionary()</code></pre>
@@ -712,41 +822,58 @@ Right now, variables are only allowed to be single characters.</p>
 </dd>
 <dt id="PDESolver.BoundaryValueProblem.BurgersEquation"><code class="flex name class">
 <span>class <span class="ident">BurgersEquation</span></span>
-<span>(</span><span>viscosity=0.01)</span>
+<span>(</span><span>viscosity=0.01, minibatch_size=128)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class defining the Burgers equation as a boundary value problem.</p>
-<p>(t, x) ⟼ y</p>
-<p>Constructor for a Burgers equation.</p></div>
+<div class="desc"><p>Class defining the Burgers equation in one spatial dimension ( <span><span class="MathJax_Preview">\Omega = [0, 1] \times [-1, 1]</span><script type="math/tex">\Omega = [0, 1] \times [-1, 1]</script></span> ).</p>
+<p>\begin{alignat}{2}
+u_{t} + u u_{x} &amp;= \frac{\nu}{\pi} u_{xx} \quad &amp;&amp;\text{in } \Omega \newline
+u(0, x) &amp;= -\sin(\pi x) \quad &amp;&amp;\forall x \in [-1, 1] \newline
+u(t, x) &amp;= 0 \quad &amp;&amp;\forall (t, x) \in [0, 1] \times \lbrace -1, 1 \rbrace
+\end{alignat}</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>viscosity</code></strong> :&ensp;<code>float</code></dt>
+<dd>Viscosity parameter</dd>
+<dt><strong><code>minibatch_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>Size of the minibatch to use for training</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class BurgersEquation(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the Burgers equation as a boundary value problem.
-
-    (t, x) ⟼ y
-    &#34;&#34;&#34;
-
-    def __init__(self, viscosity=0.01):
+    def __init__(self, viscosity=0.01, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a Burgers equation.
+        Class defining the Burgers equation in one spatial dimension ( \\(\\Omega = [0, 1] \\times [-1, 1]\\) ).
+
+        \\begin{alignat}{2}
+            u_{t} + u u_{x} &amp;= \\frac{\\nu}{\\pi} u_{xx} \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0, x) &amp;= -\\sin(\\pi x) \\quad &amp;&amp;\\forall x \\in [-1, 1] \\newline
+            u(t, x) &amp;= 0 \\quad &amp;&amp;\\forall (t, x) \\in [0, 1] \\times \\lbrace -1, 1 \\rbrace
+        \\end{alignat}
+
+        Parameters
+        -----------
+        viscosity: float
+            Viscosity parameter
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
         self.viscosity = viscosity
 
         self.conditions = [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] + tf.sin(np.pi * Du[&#34;x&#34;]),
-                      (Cuboid([0, -1], [0, 1]), 128)),
+                      (Cuboid([0, -1], [0, 1]), minibatch_size)),
             Condition(&#34;boundary&#34;,
                       lambda Du: Du[&#34;u&#34;],
-                      (Cuboid([0, -1], [1, -1]) &amp; Cuboid([0, 1], [1, 1]), 128)),
+                      (Cuboid([0, -1], [1, -1]) &amp; Cuboid([0, 1], [1, 1]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] + Du[&#34;u&#34;] * Du[&#34;u_x&#34;] - self.viscosity / np.pi * Du[&#34;u_xx&#34;],
-                      (Cuboid([0, -1], [1, 1]), 128))
+                      (Cuboid([0, -1], [1, 1]), minibatch_size))
         ]
         
         self.specification = Specification([&#34;u&#34;], [&#34;t&#34;, &#34;x&#34;], [&#34;u_t&#34;, &#34;u_xx&#34;])</code></pre>
@@ -770,18 +897,29 @@ Right now, variables are only allowed to be single characters.</p>
 <span>(</span><span>name, residue_fn, region_samples_pair, sampler=&lt;PDESolver.Sampling.Random object&gt;)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class for defining conditions for boundary value problems.</p>
+<div class="desc"><p>Class for defining a boundary value problem condition/constraint.</p>
 <h2 id="parameters">Parameters</h2>
 <dl>
 <dt><strong><code>name</code></strong> :&ensp;<code>str</code></dt>
 <dd>Name of the condition</dd>
-<dt><strong><code>residue_fn</code></strong> :&ensp;<code>dict ⟼ tensor</code></dt>
-<dd>Function that calculates the residue of the condition</dd>
+<dt><strong><code>residue_fn</code></strong> :&ensp;<code>function</code></dt>
+<dd>Function that takes in a dictionary of differentials and returns the residue</dd>
 <dt><strong><code>region_samples_pair</code></strong> :&ensp;<code>tuple</code></dt>
-<dd>Tuple of (region, number of samples)</dd>
+<dd>Tuple of (Region, int) where the Region is the region where the condition is applied and the int is the number of samples to take from the region</dd>
 <dt><strong><code>sampler</code></strong> :&ensp;<code>Sampler</code></dt>
-<dd>Sampler to use for sampling points in the region</dd>
-</dl></div>
+<dd>Sampler to use for sampling from the region</dd>
+</dl>
+<h2 id="example">Example</h2>
+<pre><code class="language-python-repl">&gt;&gt;&gt; Condition(&quot;Laplace&quot;, # Name of the condition
+...           lambda Du: Du[&quot;u_xx&quot;] + Du[&quot;u_yy&quot;], # Residue function
+...           (Cuboid([0, 0], [1, 1]), 128), # Unit square together with number of samples
+...           sampler=Random()) # Random sampler
+</code></pre>
+<pre><code class="language-python-repl">&gt;&gt;&gt; Condition(&quot;HeatEquation&quot;, # Name of the condition
+...           lambda Du: Du[&quot;u_t&quot;] - Du[&quot;u_xx&quot;], # Residue function
+...           (Cuboid([0, 0], [1, 1]), 128), # Unit square together with number of samples
+...           sampler=Random()) # Random sampler
+</code></pre></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -789,18 +927,30 @@ Right now, variables are only allowed to be single characters.</p>
 <pre><code class="python">class Condition:
     def __init__(self, name, residue_fn, region_samples_pair, sampler=Random()):
         &#34;&#34;&#34;
-        Class for defining conditions for boundary value problems.
+        Class for defining a boundary value problem condition/constraint.
 
         Parameters
         -----------
         name: str
             Name of the condition
-        residue_fn: dict ⟼ tensor
-            Function that calculates the residue of the condition
+        residue_fn: function
+            Function that takes in a dictionary of differentials and returns the residue
         region_samples_pair: tuple
-            Tuple of (region, number of samples)
+            Tuple of (Region, int) where the Region is the region where the condition is applied and the int is the number of samples to take from the region
         sampler: Sampler
-            Sampler to use for sampling points in the region
+            Sampler to use for sampling from the region
+
+        Example
+        -----------
+        &gt;&gt;&gt; Condition(&#34;Laplace&#34;, # Name of the condition
+        ...           lambda Du: Du[&#34;u_xx&#34;] + Du[&#34;u_yy&#34;], # Residue function
+        ...           (Cuboid([0, 0], [1, 1]), 128), # Unit square together with number of samples
+        ...           sampler=Random()) # Random sampler
+
+        &gt;&gt;&gt; Condition(&#34;HeatEquation&#34;, # Name of the condition
+        ...           lambda Du: Du[&#34;u_t&#34;] - Du[&#34;u_xx&#34;], # Residue function
+        ...           (Cuboid([0, 0], [1, 1]), 128), # Unit square together with number of samples
+        ...           sampler=Random()) # Random sampler
         &#34;&#34;&#34;
 
         self.name = name
@@ -893,36 +1043,48 @@ Right now, variables are only allowed to be single characters.</p>
 </dd>
 <dt id="PDESolver.BoundaryValueProblem.ConvectionDiffusionEquation"><code class="flex name class">
 <span>class <span class="ident">ConvectionDiffusionEquation</span></span>
+<span>(</span><span>minibatch_size=128)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class defining the Convection-Diffusion equation as a boundary value problem.</p>
-<p>(t, x) ⟼ y</p>
-<p>Constructor for a Convection-Diffusion equation.</p></div>
+<div class="desc"><p>Class defining the convection-diffusion equation in one spatial dimension ( <span><span class="MathJax_Preview">\Omega = [0, 1] \times [-0.5, 1]</span><script type="math/tex">\Omega = [0, 1] \times [-0.5, 1]</script></span> ).</p>
+<p>\begin{alignat}{2}
+u_{t} &amp;= 0.1u_{xx} - u_{x} \quad &amp;&amp;\text{in } \Omega \newline
+u(0, x) &amp;= \exp(-25x^2) \quad &amp;&amp;\forall x \in [-0.5, 1]
+\end{alignat}</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>minibatch_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>Size of the minibatch to use for training</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class ConvectionDiffusionEquation(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the Convection-Diffusion equation as a boundary value problem.
-
-    (t, x) ⟼ y
-    &#34;&#34;&#34;
-
-    def __init__(self):
+    def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a Convection-Diffusion equation.
+        Class defining the convection-diffusion equation in one spatial dimension ( \\(\\Omega = [0, 1] \\times [-0.5, 1]\\) ).
+
+        \\begin{alignat}{2}
+            u_{t} &amp;= 0.1u_{xx} - u_{x} \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0, x) &amp;= \\exp(-25x^2) \\quad &amp;&amp;\\forall x \\in [-0.5, 1]
+        \\end{alignat}
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
 
         self.conditions = [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.exp(-25 * Du[&#34;x&#34;]**2),
-                      (Cuboid([0, -0.5], [0, 1]), 100)),
+                      (Cuboid([0, -0.5], [0, 1]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] + Du[&#34;u_x&#34;] - 0.1 * Du[&#34;u_xx&#34;],
-                      (Cuboid([0, -0.5], [1, 1]), 1000))
+                      (Cuboid([0, -0.5], [1, 1]), minibatch_size))
         ]
 
         self.specification = Specification([&#34;u&#34;], [&#34;t&#34;, &#34;x&#34;], [&#34;u_t&#34;, &#34;u_xx&#34;])</code></pre>
@@ -943,39 +1105,53 @@ Right now, variables are only allowed to be single characters.</p>
 </dd>
 <dt id="PDESolver.BoundaryValueProblem.HeatEquation1D"><code class="flex name class">
 <span>class <span class="ident">HeatEquation1D</span></span>
+<span>(</span><span>minibatch_size=128)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class defining the 1D heat equation as a boundary value problem.</p>
-<p>(t, x) ⟼ y</p>
-<p>Constructor for a 1D heat equation.</p></div>
+<div class="desc"><p>Class defining the heat equation in one spatial dimension ( <span><span class="MathJax_Preview">\Omega = [0, 1]^2</span><script type="math/tex">\Omega = [0, 1]^2</script></span> ).</p>
+<p>\begin{alignat}{2}
+u_{t} &amp;= \frac{1}{8} u_{xx} \quad &amp;&amp;\text{in } \Omega \newline
+u(0, x) &amp;= 8x^2 (1 - x)^2 \quad &amp;&amp;\forall x \in [0, 1] \newline
+u_{x}(t, x) &amp;= 0 \quad &amp;&amp;\forall (t, x) \in [0, 1] \times \lbrace 0, 1 \rbrace
+\end{alignat}</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>minibatch_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>Size of the minibatch to use for training</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class HeatEquation1D(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the 1D heat equation as a boundary value problem.
-
-    (t, x) ⟼ y
-    &#34;&#34;&#34;
-
-    def __init__(self):
+    def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a 1D heat equation.
+        Class defining the heat equation in one spatial dimension ( \\(\\Omega = [0, 1]^2\\) ).
+
+        \\begin{alignat}{2}
+            u_{t} &amp;= \\frac{1}{8} u_{xx} \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0, x) &amp;= 8x^2 (1 - x)^2 \\quad &amp;&amp;\\forall x \\in [0, 1] \\newline
+            u_{x}(t, x) &amp;= 0 \\quad &amp;&amp;\\forall (t, x) \\in [0, 1] \\times \\lbrace 0, 1 \\rbrace
+        \\end{alignat}
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
 
         self.conditions = [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - 8*Du[&#34;x&#34;]**2 * (1 - Du[&#34;x&#34;])**2,
-                      (Cuboid([0, 0], [0, 1]), 100)),
+                      (Cuboid([0, 0], [0, 1]), minibatch_size)),
             Condition(&#34;boundary&#34;,
                       lambda Du: Du[&#34;u_x&#34;],
-                      (Cuboid([0, 0], [1, 0]) &amp; Cuboid([0, 1], [1, 1]), 100)),
+                      (Cuboid([0, 0], [1, 0]) &amp; Cuboid([0, 1], [1, 1]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] - 0.125 * Du[&#34;u_xx&#34;],
-                      (Cuboid([0, 0], [1, 1]), 1600))
+                      (Cuboid([0, 0], [1, 1]), minibatch_size))
         ]
 
         self.specification = Specification([&#34;u&#34;], [&#34;t&#34;, &#34;x&#34;], [&#34;u_t&#34;, &#34;u_xx&#34;])</code></pre>
@@ -996,36 +1172,48 @@ Right now, variables are only allowed to be single characters.</p>
 </dd>
 <dt id="PDESolver.BoundaryValueProblem.HeatEquation2D"><code class="flex name class">
 <span>class <span class="ident">HeatEquation2D</span></span>
+<span>(</span><span>minibatch_size=128)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class defining the 2D heat equation as a boundary value problem.</p>
-<p>(t, x, y) ⟼ z</p>
-<p>Constructor for a 2D heat equation.</p></div>
+<div class="desc"><p>Class defining the heat equation in two spatial dimensions ( <span><span class="MathJax_Preview">\Omega = [0, 1] \times [-2, 2]^2</span><script type="math/tex">\Omega = [0, 1] \times [-2, 2]^2</script></span> ).</p>
+<p>\begin{alignat}{2}
+u_{t} &amp;= u_{xx} + u_{yy} \quad &amp;&amp;\text{in } \Omega \newline
+u(0, x, y) &amp;= \exp(-x^2 - y^2)^2 \quad &amp;&amp;\forall (x, y) \in [-2, 2]^2
+\end{alignat}</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>minibatch_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>Size of the minibatch to use for training</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class HeatEquation2D(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the 2D heat equation as a boundary value problem.
-
-    (t, x, y) ⟼ z
-    &#34;&#34;&#34;
-
-    def __init__(self):
+    def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a 2D heat equation.
+        Class defining the heat equation in two spatial dimensions ( \\(\\Omega = [0, 1] \\times [-2, 2]^2\\) ).
+
+        \\begin{alignat}{2}
+            u_{t} &amp;= u_{xx} + u_{yy} \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0, x, y) &amp;= \\exp(-x^2 - y^2)^2 \\quad &amp;&amp;\\forall (x, y) \\in [-2, 2]^2
+        \\end{alignat}
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
 
         self.conditions = [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.exp(-Du[&#34;x&#34;] ** 2 - Du[&#34;y&#34;] ** 2) ** 2,
-                      (Cuboid([0, -2, -2], [0, 2, 2]), 400)),
+                      (Cuboid([0, -2, -2], [0, 2, 2]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] - Du[&#34;u_xx&#34;] - Du[&#34;u_yy&#34;],
-                      (Cuboid([0, -2, -2], [2, 2, 2]), 3600))
+                      (Cuboid([0, -2, -2], [2, 2, 2]), minibatch_size))
         ]
 
         self.specification = Specification([&#34;u&#34;], [&#34;t&#34;, &#34;x&#34;, &#34;y&#34;], [&#34;u_t&#34;, &#34;u_xx&#34;, &#34;u_yy&#34;])</code></pre>
@@ -1046,36 +1234,48 @@ Right now, variables are only allowed to be single characters.</p>
 </dd>
 <dt id="PDESolver.BoundaryValueProblem.KortewegDeVriesEquation"><code class="flex name class">
 <span>class <span class="ident">KortewegDeVriesEquation</span></span>
+<span>(</span><span>minibatch_size=128)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class defining the KortewegDeVriesEquation equation.</p>
-<p>(t, x) ⟼ y</p>
-<p>Constructor for a KortewegDeVriesEquation equation.</p></div>
+<div class="desc"><p>Class defining the Korteweg-de Vries equation in one spatial dimension ( <span><span class="MathJax_Preview">\Omega = [0, 1] \times [-1, 1]</span><script type="math/tex">\Omega = [0, 1] \times [-1, 1]</script></span> ).</p>
+<p>\begin{alignat}{2}
+u_{t} - 6u u_{x} - u_{xxx} &amp;= 0\quad &amp;&amp;\text{in } \Omega \newline
+u(0, x) &amp;= \cos(\pi x) \quad &amp;&amp;\forall x \in [-1, 1]
+\end{alignat}</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>minibatch_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>Size of the minibatch to use for training</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class KortewegDeVriesEquation(BoundaryValueProblem):
-    &#34;&#34;&#34;
-        Class defining the KortewegDeVriesEquation equation.
-
-        (t, x) ⟼ y
-    &#34;&#34;&#34;
-
-    def __init__(self):
+    def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a KortewegDeVriesEquation equation.
+        Class defining the Korteweg-de Vries equation in one spatial dimension ( \\(\\Omega = [0, 1] \\times [-1, 1]\\) ).
+
+        \\begin{alignat}{2}
+            u_{t} - 6u u_{x} - u_{xxx} &amp;= 0\\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0, x) &amp;= \\cos(\\pi x) \\quad &amp;&amp;\\forall x \\in [-1, 1]
+        \\end{alignat}
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
 
         self.conditions = [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.cos(np.pi * Du[&#34;x&#34;]),
-                      (Cuboid([0, -1], [0, 1]), 128)),
+                      (Cuboid([0, -1], [0, 1]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_t&#34;] + 6 * Du[&#34;u&#34;] * Du[&#34;u_x&#34;] + Du[&#34;u_xxx&#34;],
-                      (Cuboid([0, -1], [1, 1]), 128))
+                      (Cuboid([0, -1], [1, 1]), minibatch_size))
         ]
 
         self.specification = Specification([&#34;u&#34;], [&#34;t&#34;, &#34;x&#34;], [&#34;u_t&#34;, &#34;u_xxx&#34;])</code></pre>
@@ -1096,42 +1296,55 @@ Right now, variables are only allowed to be single characters.</p>
 </dd>
 <dt id="PDESolver.BoundaryValueProblem.Laplace"><code class="flex name class">
 <span>class <span class="ident">Laplace</span></span>
+<span>(</span><span>minibatch_size=128)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class defining the Laplace equation in 2D as a boundary value problem.</p>
-<p>(x, y) ⟼ z</p>
-<p>Constructor for a Laplace equation.</p></div>
+<div class="desc"><p>Class defining the Laplace equation ( <span><span class="MathJax_Preview">\Omega = [0, 1]^2 </span><script type="math/tex">\Omega = [0, 1]^2 </script></span> ).
+\begin{alignat}{2}
+\Delta u &amp;= 0 \quad &amp;&amp;\text{in } \Omega \newline
+u(x, y) &amp;= 0 \quad &amp;&amp;\forall (x, y) \in \Gamma_S \cup \Gamma_W \cup \Gamma_E \newline
+u(x, y) &amp;= 2x(1 - x) \quad &amp;&amp;\forall (x, y) \in \Gamma_N
+\end{alignat}</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>minibatch_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>Size of the minibatch to use for training</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class Laplace(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the Laplace equation in 2D as a boundary value problem.
-
-    (x, y) ⟼ z
-    &#34;&#34;&#34;
-
-    def __init__(self):
+    def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a Laplace equation.
+        Class defining the Laplace equation ( \\(\\Omega = [0, 1]^2 \\) ).
+        \\begin{alignat}{2}
+            \\Delta u &amp;= 0 \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(x, y) &amp;= 0 \\quad &amp;&amp;\\forall (x, y) \\in \\Gamma_S \\cup \\Gamma_W \\cup \\Gamma_E \\newline
+            u(x, y) &amp;= 2x(1 - x) \\quad &amp;&amp;\\forall (x, y) \\in \\Gamma_N
+        \\end{alignat}
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
  
         self.conditions = [
             Condition(&#34;zero_boundary&#34;,
                       lambda Du: Du[&#34;u&#34;],
-                      (Cuboid([0, 0], [0, 1]) &amp; Cuboid([0, 0], [1, 0]) &amp; Cuboid([1, 0], [1, 1]), 128)),
+                      (Cuboid([0, 0], [0, 1]) &amp; Cuboid([0, 0], [1, 0]) &amp; Cuboid([1, 0], [1, 1]), minibatch_size)),
 
             Condition(&#34;f_boundary&#34;,
                       # tf.where(tf.abs(Du[&#34;x&#34;] - 0.5) &lt; 0.25, 1., 0.),
                       lambda Du: Du[&#34;u&#34;] - 2 * Du[&#34;x&#34;] * (1 - Du[&#34;x&#34;]),
-                      (Cuboid([0, 1], [1, 1]), 128)),
+                      (Cuboid([0, 1], [1, 1]), minibatch_size)),
 
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_xx&#34;] + Du[&#34;u_yy&#34;],
-                      (Cuboid([0, 0], [1, 1]), 128))
+                      (Cuboid([0, 0], [1, 1]), minibatch_size))
         ]
 
         self.specification = Specification([&#34;u&#34;], [&#34;x&#34;, &#34;y&#34;], [&#34;u_xx&#34;, &#34;u_yy&#34;])</code></pre>
@@ -1152,39 +1365,54 @@ Right now, variables are only allowed to be single characters.</p>
 </dd>
 <dt id="PDESolver.BoundaryValueProblem.MinimalSurfaceEquation"><code class="flex name class">
 <span>class <span class="ident">MinimalSurfaceEquation</span></span>
+<span>(</span><span>minibatch_size=128)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class defining the minimal surface equation as a boundary value problem.</p>
-<p>(x, y) ⟼ z</p>
-<p>Constructor for a minimal surface equation.</p></div>
+<div class="desc"><p>Class defining the minimal surface equation in two spatial dimensions ( <span><span class="MathJax_Preview">\Omega = [0, 1] \times [-1, 1]</span><script type="math/tex">\Omega = [0, 1] \times [-1, 1]</script></span> ).</p>
+<p>\begin{alignat}{2}
+(1 + u_{x}^2)u_{yy} - 2u_{y}u_{x}u_{xy} + (1 + u_{y}^2)u_{xx} &amp;= 0\quad &amp;&amp;\text{in } \Omega \newline
+u(0, x) &amp;= x \quad &amp;&amp;\forall x \in [-1, 1] \newline
+u(1, x) &amp;= -x \quad &amp;&amp;\forall x \in [-1, 1] \newline
+\end{alignat}</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>minibatch_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>Size of the minibatch to use for training</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class MinimalSurfaceEquation(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the minimal surface equation as a boundary value problem.
-
-    (x, y) ⟼ z
-    &#34;&#34;&#34;
-
-    def __init__(self):
+    def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a minimal surface equation.
+        Class defining the minimal surface equation in two spatial dimensions ( \\(\\Omega = [0, 1] \\times [-1, 1]\\) ).
+
+        \\begin{alignat}{2}
+            (1 + u_{x}^2)u_{yy} - 2u_{y}u_{x}u_{xy} + (1 + u_{y}^2)u_{xx} &amp;= 0\\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0, x) &amp;= x \\quad &amp;&amp;\\forall x \\in [-1, 1] \\newline
+            u(1, x) &amp;= -x \\quad &amp;&amp;\\forall x \\in [-1, 1] \\newline
+        \\end{alignat}
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
+
         self.conditions = [
             Condition(&#34;boundary1&#34;,
                       lambda Du: Du[&#34;u&#34;] - Du[&#34;x&#34;],
-                      (Cuboid([0, -1], [0, 1]), 50)),
+                      (Cuboid([0, -1], [0, 1]), minibatch_size)),
             Condition(&#34;boundary2&#34;,
                       lambda Du: Du[&#34;u&#34;] + Du[&#34;x&#34;],
-                      (Cuboid([1, -1], [1, 1]), 50)),
+                      (Cuboid([1, -1], [1, 1]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: (1 + Du[&#34;u_x&#34;] ** 2) * Du[&#34;u_yy&#34;] - 2 * Du[&#34;u_y&#34;] * Du[&#34;u_x&#34;] * Du[&#34;u_xy&#34;] + (
                               1 + Du[&#34;u_y&#34;] ** 2) * Du[&#34;u_xx&#34;],
-                      (Cuboid([0, -1], [1, 1]), 500))
+                      (Cuboid([0, -1], [1, 1]), minibatch_size))
         ]
 
         self.specification = Specification([&#34;u&#34;], [&#34;x&#34;, &#34;y&#34;], [&#34;u_xx&#34;, &#34;u_yy&#34;, &#34;u_xy&#34;])</code></pre>
@@ -1205,29 +1433,64 @@ Right now, variables are only allowed to be single characters.</p>
 </dd>
 <dt id="PDESolver.BoundaryValueProblem.Pendulum"><code class="flex name class">
 <span>class <span class="ident">Pendulum</span></span>
-<span>(</span><span>init_pos=[1, 0], init_vel=[0, 0], gravity=1.5, t_start=0, t_end=2, mini_batch=128)</span>
+<span>(</span><span>init_pos=[1, 0], init_vel=[0, 0], gravity=1.5, t_start=0, t_end=2, minibatch_size=128)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class defining the differential algebraic equation for a pendulum.</p>
-<p>t ⟼ (x_1, x_2, lambda)</p>
-<p>Constructor for a pendulum.</p></div>
+<div class="desc"><p>Class defining the EOM for the simple pendulum ( <span><span class="MathJax_Preview">\Omega = [T_0, T_1]</span><script type="math/tex">\Omega = [T_0, T_1]</script></span> ).</p>
+<p>\begin{alignat}{2}
+u_{tt} &amp;= -\lambda u - (0, g)^\top \quad &amp;&amp;\text{in } \Omega \newline
+\Vert u \Vert_2^2 &amp;= 1 \quad &amp;&amp;\text{in } \Omega \newline
+u(0) &amp;= p_0 \newline
+u_{t}(0) &amp;= v_0 \newline
+\end{alignat}</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>init_pos</code></strong> :&ensp;<code>list</code></dt>
+<dd>Initial position of the pendulum</dd>
+<dt><strong><code>init_vel</code></strong> :&ensp;<code>list</code></dt>
+<dd>Initial velocity of the pendulum</dd>
+<dt><strong><code>gravity</code></strong> :&ensp;<code>float</code></dt>
+<dd>Gravity constant</dd>
+<dt><strong><code>t_start</code></strong> :&ensp;<code>float</code></dt>
+<dd>Start time</dd>
+<dt><strong><code>t_end</code></strong> :&ensp;<code>float</code></dt>
+<dd>End time</dd>
+<dt><strong><code>minibatch_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>Size of the minibatch to use for training</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class Pendulum(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the differential algebraic equation for a pendulum.
-
-    t ⟼ (x_1, x_2, lambda)
-    &#34;&#34;&#34;
-
-    def __init__(self, init_pos=[1, 0], init_vel=[0, 0], gravity=1.5, t_start=0, t_end=2, mini_batch=128):
+    def __init__(self, init_pos=[1, 0], init_vel=[0, 0], gravity=1.5, t_start=0, t_end=2, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a pendulum.
+        Class defining the EOM for the simple pendulum ( \\(\\Omega = [T_0, T_1]\\) ).
+
+        \\begin{alignat}{2}
+            u_{tt} &amp;= -\\lambda u - (0, g)^\\top \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            \\Vert u \\Vert_2^2 &amp;= 1 \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0) &amp;= p_0 \\newline
+            u_{t}(0) &amp;= v_0 \\newline
+        \\end{alignat}
+
+        Parameters
+        -----------
+        init_pos: list
+            Initial position of the pendulum
+        init_vel: list
+            Initial velocity of the pendulum
+        gravity: float
+            Gravity constant    
+        t_start: float
+            Start time
+        t_end: float
+            End time
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
 
         initPos = lambda t: tf.concat([0*t + init_pos[0], 0*t + init_pos[1]], axis=1)
         initVel = lambda t: tf.concat([0*t + init_vel[0], 0*t + init_vel[1]], axis=1)
@@ -1236,16 +1499,16 @@ Right now, variables are only allowed to be single characters.</p>
         self.conditions = [
             Condition(&#34;initialPos&#34;,
                       lambda Du: Du[&#34;u&#34;] - initPos(Du[&#34;t&#34;]),
-                      (Cuboid([t_start], [t_start]), mini_batch)),
+                      (Cuboid([t_start], [t_start]), minibatch_size)),
             Condition(&#34;initialVel&#34;,
                       lambda Du: Du[&#34;u_t&#34;] - initVel(Du[&#34;t&#34;]),
-                      (Cuboid([t_start], [t_start]), mini_batch)),
+                      (Cuboid([t_start], [t_start]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_tt&#34;] - ode(Du[&#34;u&#34;], Du[&#34;t&#34;], Du[&#34;lagrange&#34;]),
-                      (Cuboid([t_start], [t_end]), mini_batch)),
+                      (Cuboid([t_start], [t_end]), minibatch_size)),
             Condition(&#34;constraint&#34;,
                       lambda Du: tf.reshape(tf.norm(Du[&#34;u&#34;], axis=1), (-1, 1))**2 - 1.,
-                      (Cuboid([t_start], [t_end]), mini_batch))
+                      (Cuboid([t_start], [t_end]), minibatch_size))
         ]
 
         self.specification = Specification([&#34;x&#34;, &#34;y&#34;, &#34;lagrange&#34;], [&#34;t&#34;], [&#34;x_tt&#34;, &#34;y_tt&#34;], 
@@ -1276,7 +1539,8 @@ Right now, variables are only allowed to be single characters.</p>
 <dt><strong><code>components</code></strong> :&ensp;<code>list</code></dt>
 <dd>List of names for the output components</dd>
 <dt><strong><code>variables</code></strong> :&ensp;<code>list</code></dt>
-<dd>List of names for the input variables</dd>
+<dd>List of names for the input variables
+Remark: As of right now only single character variables are supported</dd>
 <dt><strong><code>differentials</code></strong> :&ensp;<code>list</code></dt>
 <dd>List of differentials needed to check the constraints</dd>
 <dt><strong><code>stacked_components</code></strong> :&ensp;<code>dict</code></dt>
@@ -1285,12 +1549,12 @@ Right now, variables are only allowed to be single characters.</p>
 <h2 id="example">Example</h2>
 <p>Consider the EOM of a simple pendulum using cartesian coordinates:</p>
 <pre><code class="language-python-repl">&gt;&gt;&gt; Specification([&quot;x&quot;, &quot;y&quot;, &quot;lagrange&quot;], # Components of the output
-                  [&quot;t&quot;], # Input variable
-                  [&quot;x_tt&quot;, &quot;y_tt&quot;], # Differentials needed to check the constraints
-                  {&quot;u&quot;: [&quot;x&quot;, &quot;y&quot;], &quot;u_t&quot;: [&quot;x_t&quot;, &quot;y_t&quot;], &quot;u_tt&quot;: [&quot;x_tt&quot;, &quot;y_tt&quot;]}) # Stacked components 
+...               [&quot;t&quot;], # Input variable
+...               [&quot;x_tt&quot;, &quot;y_tt&quot;], # Differentials needed to check the constraints
+...               {&quot;u&quot;: [&quot;x&quot;, &quot;y&quot;], &quot;u_t&quot;: [&quot;x_t&quot;, &quot;y_t&quot;], &quot;u_tt&quot;: [&quot;x_tt&quot;, &quot;y_tt&quot;]}) # Stacked components 
 &gt;&gt;&gt; Condition(&quot;algebraic constraint&quot;,
-              lambda Du: tf.reshape(tf.norm(Du[&quot;u&quot;], axis=1), (-1, 1))**2 - 1.,
-              (Cuboid([0], [1]), 128))
+...           lambda Du: tf.reshape(tf.norm(Du[&quot;u&quot;], axis=1), (-1, 1))**2 - 1.,
+...           (Cuboid([0], [1]), 128))
 </code></pre></div>
 <details class="source">
 <summary>
@@ -1307,6 +1571,7 @@ Right now, variables are only allowed to be single characters.</p>
             List of names for the output components
         variables: list
             List of names for the input variables
+            Remark: As of right now only single character variables are supported
         differentials: list
             List of differentials needed to check the constraints
         stacked_components: dict
@@ -1315,13 +1580,14 @@ Right now, variables are only allowed to be single characters.</p>
         Example
         -----------
         Consider the EOM of a simple pendulum using cartesian coordinates:
+
         &gt;&gt;&gt; Specification([&#34;x&#34;, &#34;y&#34;, &#34;lagrange&#34;], # Components of the output
-                          [&#34;t&#34;], # Input variable
-                          [&#34;x_tt&#34;, &#34;y_tt&#34;], # Differentials needed to check the constraints
-                          {&#34;u&#34;: [&#34;x&#34;, &#34;y&#34;], &#34;u_t&#34;: [&#34;x_t&#34;, &#34;y_t&#34;], &#34;u_tt&#34;: [&#34;x_tt&#34;, &#34;y_tt&#34;]}) # Stacked components 
+        ...               [&#34;t&#34;], # Input variable
+        ...               [&#34;x_tt&#34;, &#34;y_tt&#34;], # Differentials needed to check the constraints
+        ...               {&#34;u&#34;: [&#34;x&#34;, &#34;y&#34;], &#34;u_t&#34;: [&#34;x_t&#34;, &#34;y_t&#34;], &#34;u_tt&#34;: [&#34;x_tt&#34;, &#34;y_tt&#34;]}) # Stacked components 
         &gt;&gt;&gt; Condition(&#34;algebraic constraint&#34;,
-                      lambda Du: tf.reshape(tf.norm(Du[&#34;u&#34;], axis=1), (-1, 1))**2 - 1.,
-                      (Cuboid([0], [1]), 128))
+        ...           lambda Du: tf.reshape(tf.norm(Du[&#34;u&#34;], axis=1), (-1, 1))**2 - 1.,
+        ...           (Cuboid([0], [1]), 128))
         &#34;&#34;&#34;
 
         self.components = components
@@ -1335,7 +1601,7 @@ Right now, variables are only allowed to be single characters.</p>
 
         Returns
         -----------
-        dict: Specification of form {&#34;components&#34;: [str], &#34;variables&#34;: [str], &#34;differentials&#34;: [str], &#34;stacked_components&#34;: {str: [str]}
+        dict: {&#34;components&#34;: [str], &#34;variables&#34;: [str], &#34;differentials&#34;: [str], &#34;stacked_components&#34;: {str: [str]}
         &#34;&#34;&#34;
 
         return {&#34;components&#34;: self.components, &#34;variables&#34;: self.variables, &#34;differentials&#34;: self.differentials, &#34;stacked_components&#34;: self.stacked_components}</code></pre>
@@ -1349,7 +1615,7 @@ Right now, variables are only allowed to be single characters.</p>
 <div class="desc"><p>Returns the specification as a dictionary.</p>
 <h2 id="returns">Returns</h2>
 <dl>
-<dt><strong><code>dict</code></strong> :&ensp;<code><a title="PDESolver.BoundaryValueProblem.Specification" href="#PDESolver.BoundaryValueProblem.Specification">Specification</a></code> of <code>form {"components": [str], "variables": [str], "differentials": [str], "stacked_components": {str: [str]}</code></dt>
+<dt><strong><code>dict</code></strong> :&ensp;<code>{"components": [str], "variables": [str], "differentials": [str], "stacked_components": {str: [str]}</code></dt>
 <dd>&nbsp;</dd>
 </dl></div>
 <details class="source">
@@ -1362,7 +1628,7 @@ Right now, variables are only allowed to be single characters.</p>
 
     Returns
     -----------
-    dict: Specification of form {&#34;components&#34;: [str], &#34;variables&#34;: [str], &#34;differentials&#34;: [str], &#34;stacked_components&#34;: {str: [str]}
+    dict: {&#34;components&#34;: [str], &#34;variables&#34;: [str], &#34;differentials&#34;: [str], &#34;stacked_components&#34;: {str: [str]}
     &#34;&#34;&#34;
 
     return {&#34;components&#34;: self.components, &#34;variables&#34;: self.variables, &#34;differentials&#34;: self.differentials, &#34;stacked_components&#34;: self.stacked_components}</code></pre>
@@ -1372,42 +1638,58 @@ Right now, variables are only allowed to be single characters.</p>
 </dd>
 <dt id="PDESolver.BoundaryValueProblem.VanDerPolEquation"><code class="flex name class">
 <span>class <span class="ident">VanDerPolEquation</span></span>
+<span>(</span><span>minibatch_size=128)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class defining the Van-der-Pol equation as a boundary value problem.</p>
-<p>(t, x) ⟼ y</p>
-<p>Constructor for a Van-der-Pol equation.</p></div>
+<div class="desc"><p>Class defining the Van der Pol equation with varying <span><span class="MathJax_Preview">\mu</span><script type="math/tex">\mu</script></span> ( <span><span class="MathJax_Preview">\Omega = [0, 4] \times [0, 10]</span><script type="math/tex">\Omega = [0, 4] \times [0, 10]</script></span> ).</p>
+<p>\begin{alignat}{2}
+u_{xx} - t(1 - u^2)u_{x} + u &amp;= 0 \quad &amp;&amp;\text{in } \Omega \newline
+u(0, x) &amp;= \cos(x) \quad &amp;&amp;\forall x \in [0, 10] \newline
+u(t, 0) &amp;= 1 \quad &amp;&amp;\forall t \in [0, 4] \newline
+u_{x}(t, 0) &amp;= 0 \quad &amp;&amp;\forall t \in [0, 4]
+\end{alignat}</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>minibatch_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>Size of the minibatch to use for training</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class VanDerPolEquation(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the Van-der-Pol equation as a boundary value problem.
-
-    (t, x) ⟼ y
-    &#34;&#34;&#34;
-
-    def __init__(self):
+    def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a Van-der-Pol equation.
+        Class defining the Van der Pol equation with varying \\(\\mu\\) ( \\(\\Omega = [0, 4] \\times [0, 10]\\) ).
+
+        \\begin{alignat}{2}
+            u_{xx} - t(1 - u^2)u_{x} + u &amp;= 0 \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0, x) &amp;= \\cos(x) \\quad &amp;&amp;\\forall x \\in [0, 10] \\newline
+            u(t, 0) &amp;= 1 \\quad &amp;&amp;\\forall t \\in [0, 4] \\newline
+            u_{x}(t, 0) &amp;= 0 \\quad &amp;&amp;\\forall t \\in [0, 4]
+        \\end{alignat}
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
 
         self.conditions = [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - 1,
-                      (Cuboid([0, 0], [4, 0]), 200)),
+                      (Cuboid([0, 0], [4, 0]), minibatch_size)),
             Condition(&#34;boundary&#34;,
                       lambda Du: Du[&#34;u_x&#34;],
-                      (Cuboid([0, 0], [4, 0]), 200)),
+                      (Cuboid([0, 0], [4, 0]), minibatch_size)),
             Condition(&#34;helper&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.cos(Du[&#34;x&#34;]),
-                      (Cuboid([0, 0], [0, 10]), 200)),
+                      (Cuboid([0, 0], [0, 10]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_xx&#34;] - Du[&#34;t&#34;] * (1 - Du[&#34;u&#34;] ** 2) * Du[&#34;u_x&#34;] + Du[&#34;u&#34;],
-                      (Cuboid([0, 0], [4, 10]), 3000))
+                      (Cuboid([0, 0], [4, 10]), minibatch_size))
         ]
         
         self.specification = Specification([&#34;u&#34;], [&#34;t&#34;, &#34;x&#34;], [&#34;u_xx&#34;])</code></pre>
@@ -1431,37 +1713,49 @@ Right now, variables are only allowed to be single characters.</p>
 <span>(</span><span>minibatch_size=128)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class defining the 1D wave equation as a boundary value problem.</p>
-<p>(t, x) ⟼ y</p>
-<p>Constructor for a 1D wave equation.</p></div>
+<div class="desc"><p>Class defining the wave equation in one spatial dimension ( <span><span class="MathJax_Preview">\Omega = [0, 1] \times [-1, 1]</span><script type="math/tex">\Omega = [0, 1] \times [-1, 1]</script></span> ).
+\begin{alignat}{2}
+u_{tt} &amp;= u_{xx} \quad &amp;&amp;\text{in } \Omega \newline
+u(0, x) &amp;= \exp(-25x^2) \quad &amp;&amp;\forall x \in [-1, 1] \newline
+u_{t}(0, x) &amp;= 0 \quad &amp;&amp;\forall x \in [-1, 1]
+\end{alignat}</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>minibatch_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>Size of the minibatch to use for training</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class WaveEquation1D(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the 1D wave equation as a boundary value problem.
-
-    (t, x) ⟼ y
-    &#34;&#34;&#34;
-
     def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a 1D wave equation.
+        Class defining the wave equation in one spatial dimension ( \\(\\Omega = [0, 1] \\times [-1, 1]\\) ).
+        \\begin{alignat}{2}
+            u_{tt} &amp;= u_{xx} \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0, x) &amp;= \\exp(-25x^2) \\quad &amp;&amp;\\forall x \\in [-1, 1] \\newline
+            u_{t}(0, x) &amp;= 0 \\quad &amp;&amp;\\forall x \\in [-1, 1]
+        \\end{alignat}
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
         
         self.conditions = [
             Condition(&#34;initial&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.exp(-25 * Du[&#34;x&#34;]**2), #1 / (200*(Du[&#34;x&#34;] + 0.5) ** 2 + 1) - 1 / (200*(Du[&#34;x&#34;] - 0.5)**2 + 2),
-                      (Cuboid([0, -1], [0, 1]), None)),
+                      (Cuboid([0, -1], [0, 1]), minibatch_size)),
             Condition(&#34;boundary1&#34;,
                       lambda Du: Du[&#34;u_t&#34;],
-                      (Cuboid([0, -1], [0, 1]), None)),
+                      (Cuboid([0, -1], [0, 1]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_tt&#34;] - Du[&#34;u_xx&#34;],
-                      (Cuboid([0, -1], [1, 1]), None))
+                      (Cuboid([0, -1], [1, 1]), minibatch_size))
         ]
 
         self.specification = Specification([&#34;u&#34;], [&#34;t&#34;, &#34;x&#34;], [&#34;u_tt&#34;, &#34;u_xx&#34;])</code></pre>
@@ -1482,36 +1776,52 @@ Right now, variables are only allowed to be single characters.</p>
 </dd>
 <dt id="PDESolver.BoundaryValueProblem.WaveEquation2D"><code class="flex name class">
 <span>class <span class="ident">WaveEquation2D</span></span>
+<span>(</span><span>minibatch_size=128)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Class defining the 2D wave equation as a boundary value problem.</p>
-<p>(t, x, y) ⟼ z</p>
-<p>Constructor for a 2D wave equation.</p></div>
+<div class="desc"><p>Class defining the wave equation in two spatial dimensions ( <span><span class="MathJax_Preview">\Omega = [0, 1] \times [-2, 2]^2</span><script type="math/tex">\Omega = [0, 1] \times [-2, 2]^2</script></span> ).
+\begin{alignat}{2}
+u_{tt} &amp;= u_{xx} \quad &amp;&amp;\text{in } \Omega \newline
+u(0, x, y) &amp;= \exp(-x^2 - y^2)^4 \quad &amp;&amp;\forall (x, y) \in [-2, 2]^2 \newline
+u_{t}(0, x, y) &amp;= 0 \quad &amp;&amp;\forall (x, y) \in [-2, 2]^2
+\end{alignat}</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>minibatch_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>Size of the minibatch to use for training</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class WaveEquation2D(BoundaryValueProblem):
-    &#34;&#34;&#34;
-    Class defining the 2D wave equation as a boundary value problem.
-
-    (t, x, y) ⟼ z
-    &#34;&#34;&#34;
-
-    def __init__(self):
+    def __init__(self, minibatch_size=128):
         &#34;&#34;&#34;
-        Constructor for a 2D wave equation.
+        Class defining the wave equation in two spatial dimensions ( \\(\\Omega = [0, 1] \\times [-2, 2]^2\\) ).
+        \\begin{alignat}{2}
+            u_{tt} &amp;= u_{xx} \\quad &amp;&amp;\\text{in } \\Omega \\newline
+            u(0, x, y) &amp;= \\exp(-x^2 - y^2)^4 \\quad &amp;&amp;\\forall (x, y) \\in [-2, 2]^2 \\newline
+            u_{t}(0, x, y) &amp;= 0 \\quad &amp;&amp;\\forall (x, y) \\in [-2, 2]^2
+        \\end{alignat}
+
+        Parameters
+        -----------
+        minibatch_size: int
+            Size of the minibatch to use for training
         &#34;&#34;&#34;
 
-        super().__init__()
+        super().__init__(minibatch_size)
 
         self.conditions = [
             Condition(&#34;initial_u&#34;,
                       lambda Du: Du[&#34;u&#34;] - tf.exp(-Du[&#34;x&#34;] ** 2 - Du[&#34;y&#34;] ** 2) ** 4,
-                      (Cuboid([0, -2, -2], [0, 2, 2]), 512)),
+                      (Cuboid([0, -2, -2], [0, 2, 2]), minibatch_size)),
+            Condition(&#34;initial_u&#34;,
+                      lambda Du: Du[&#34;u_t&#34;],
+                      (Cuboid([0, -2, -2], [0, 2, 2]), minibatch_size)),
             Condition(&#34;inner&#34;,
                       lambda Du: Du[&#34;u_tt&#34;] - Du[&#34;u_xx&#34;] - Du[&#34;u_yy&#34;],
-                      (Cuboid([0, -2, -2], [2, 2, 2]), 512))
+                      (Cuboid([0, -2, -2], [2, 2, 2]), minibatch_size))
         ]
 
         self.specification = Specification([&#34;u&#34;], [&#34;t&#34;, &#34;x&#34;, &#34;y&#34;], [&#34;u_tt&#34;, &#34;u_xx&#34;, &#34;u_yy&#34;])</code></pre>
