@@ -41,11 +41,11 @@ class KleinGordon(BoundaryValueProblem):
         self.specification = Specification(["u"], ["t", "x"], ["u_tt", "u_xx"])
 
 # Number of iterations
-N = 10000
+N = 40000
 
 # Initialize solver, learning rate scheduler and choose optimizer
-optim = Optimizer(initial_learning_rate=0.001, decay_steps=500, decay_rate=0.9)
-solver = Solver(KleinGordon(), optim, num_hidden_layers=4, num_neurons_per_layer=50)
+optim = Optimizer(initial_learning_rate=0.001, decay_steps=1000, decay_rate=0.95)
+solver = Solver(KleinGordon(), optim, num_hidden_layers=5, num_neurons_per_layer=50)
 
 # Train model and plot result
 solver.train(iterations=N, debug_frequency=N)

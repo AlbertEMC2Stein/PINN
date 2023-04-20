@@ -27,7 +27,7 @@ optim = Optimizer(initial_learning_rate=0.001, decay_steps=1000, decay_rate=0.92
 solver = Solver(HelmholtzEquation(), optim, num_hidden_layers=4, num_neurons_per_layer=50)
 
 # Train model and plot results
-solver.train(iterations=N, debug_frequency=N//4)
+solver.train(iterations=N, debug_frequency=N)
 
 def u(t, x): return tf.sin(pi * t) * tf.sin(4*pi * x)
 error_plot_2D(solver, u, ('x', 'y'), (-1, 1, -1, 1))

@@ -8,12 +8,12 @@ class HarmonicOscillator(BoundaryValueProblem):
             Condition(
                 "initial",
                 lambda Du: Du["u"],
-                (Cuboid([0], [0]), 1),
+                (Cuboid([0], [0]), 50),
             ),
             Condition(
                 "initial_x",
                 lambda Du: Du["u_x"] - 1,
-                (Cuboid([0], [0]), 1),
+                (Cuboid([0], [0]), 50),
             ),
             Condition(
                 "inner",
@@ -28,8 +28,8 @@ class HarmonicOscillator(BoundaryValueProblem):
 N = 5000
 
 # Initialize solver, learning rate scheduler and choose optimizer
-optim = Optimizer(initial_learning_rate=0.001, decay_steps=1000, decay_rate=0.92)
-solver = Solver(HarmonicOscillator(), optim, num_hidden_layers=4, num_neurons_per_layer=50)
+optim = Optimizer(initial_learning_rate=0.001, decay_steps=100, decay_rate=0.95)
+solver = Solver(HarmonicOscillator(), optim, num_hidden_layers=4, num_neurons_per_layer=16)
 
 # Train model and plot results
 solver.train(iterations=N, debug_frequency=N)
