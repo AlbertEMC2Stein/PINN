@@ -64,7 +64,7 @@ class Solver:
 
         Examples
         -----------
-        &gt;&gt;&gt; from PDESolver.BoundaryValueProblem import *
+        &gt;&gt;&gt; from PDESolver import *
         &gt;&gt;&gt; optimizer = Optimizer(initial_learning_rate=1e-3, decay_steps=1000, decay_rate=0.9)
         &gt;&gt;&gt; bvp = Laplace()
         &gt;&gt;&gt; solver = Solver(bvp, optimizer, num_hidden_layers=4, num_neurons_per_layer=50)
@@ -223,12 +223,13 @@ class Solver:
         residuals = self.compute_residuals()
 
         losses = {name: 0.0 for name in residuals.keys()}
-        losses[&#39;L2&#39;] = 0.0
+        l2loss = 0.0
         for i, (name, residual) in enumerate(residuals.items()):
             losses[name] += self.weights[i] * criterion(residual, 0.0)
-            losses[&#39;L2&#39;] += criterion(residual, 0.0)
+            l2loss += criterion(residual, 0.0)
 
         losses[&#39;total&#39;] = sum(losses.values())
+        losses[&#39;L2&#39;] = l2loss
 
         return losses
  
@@ -314,6 +315,20 @@ class Solver:
         tensor: L2 loss
         dict: Dictionary of gradients of form {condition_name: gradient}
         dict: Dictionary of adjusted condition weights of form {condition_name: weight}
+
+        Examples
+        -----------
+        &gt;&gt;&gt; from PDESolver import *
+        &gt;&gt;&gt; solver = Solver(Laplace(), Optimizer())
+        &gt;&gt;&gt; l2loss, gradients, new_weights = solver.train_step()
+        &gt;&gt;&gt; l2loss
+        &lt;tf.Tensor: shape=(), dtype=float32, numpy=4.371607&gt;
+        &gt;&gt;&gt; l2loss, gradients, new_weights = solver.train_step()
+        &gt;&gt;&gt; l2loss
+        &lt;tf.Tensor: shape=(), dtype=float32, numpy=3.0963678&gt;
+        &gt;&gt;&gt; l2loss, gradients, new_weights = solver.train_step()
+        &gt;&gt;&gt; l2loss
+        &lt;tf.Tensor: shape=(), dtype=float32, numpy=3.029224&gt;
         &#34;&#34;&#34;
         
         l2loss, gradients = self.compute_gradients()
@@ -339,6 +354,13 @@ class Solver:
         debug_frequency: int (default=2500)
             Frequency (every X iterations) at which to show debug panel.
             If negative, no debug panel is shown
+
+        Examples
+        -----------
+        &gt;&gt;&gt; from PDESolver import *
+        &gt;&gt;&gt; solver = Solver(Laplace(), Optimizer())
+        &gt;&gt;&gt; solver.train(iterations=10000, debug_frequency=2500)
+        øL²-loss = 6.044e+01 (best: 2.305e+01, 000064it ago) lr = 0.00090:   3%|█                                | 1271/40000 [00:33&lt;07:53, 81.76it/s]
         &#34;&#34;&#34;
 
         best_loss = np.inf
@@ -374,6 +396,14 @@ class Solver:
         -----------
         gradients: tuple
             Tuple of gradients of the PDE and data losses obtained from compute_gradients
+
+        Examples
+        -----------
+        &gt;&gt;&gt; from PDESolver import *                        
+        &gt;&gt;&gt; solver = Solver(Laplace(), Optimizer())
+        &gt;&gt;&gt; l2loss, gradients = solver.compute_gradients()
+        &gt;&gt;&gt; solver.loss_history += [l2loss.numpy()]
+        &gt;&gt;&gt; solver.show_debugplot(gradients)    
         &#34;&#34;&#34;
 
         fig = plt.figure(figsize=(16, 8), layout=&#39;compressed&#39;)
@@ -400,7 +430,7 @@ class Solver:
             axs[ax_count].set_ylim(0, 100)
             axs[ax_count].set_yscale(&#39;symlog&#39;)
             axs[ax_count].set_title(self.model.layers[j].name)
-        
+
         axs[-1].legend()
 
         n = len(self.loss_history)
@@ -444,6 +474,29 @@ class Solver:
 
 class Optimizer(tf.keras.optimizers.Adam):
     def __init__(self, initial_learning_rate=1e-3, decay_steps=1000, decay_rate=0.9):
+        &#34;&#34;&#34;
+        Optimizer for the neural network used in a solver object.
+        Acts as a wrapper for the Adam optimizer with an exponential learning rate decay.
+
+        Parameters
+        -----------
+        initial_learning_rate: float
+            Initial learning rate of the optimizer.
+            Defaults to 1e-3.
+        decay_steps: int
+            Number of iterations after which the learning rate has decayed by the specified factor.
+            Defaults to 1000.
+        decay_rate: float
+            Factor by which the learning rate is decayed.
+            Defaults to 0.9.
+
+        Examples
+        -----------
+        &gt;&gt;&gt; from PDESolver import *
+        &gt;&gt;&gt; optimizer = Optimizer(initial_learning_rate=1, decay_steps=500, decay_rate=0.5)
+        &gt;&gt;&gt; solver = Solver(Laplace(), optimizer)
+        &#34;&#34;&#34;
+
         self.lr_scheduler = tf.keras.optimizers.schedules.ExponentialDecay(initial_learning_rate, decay_steps, decay_rate) 
         super().__init__(learning_rate=self.lr_scheduler)
 
@@ -533,16 +586,6 @@ def init_model(num_inputs, num_outputs, num_hidden_layers, num_neurons_per_layer
 
     outputs = layers[-1](outputs)
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
-
-    # model = tf.keras.Sequential()
-    # model.add(tf.keras.Input(num_inputs))
-
-    # for _ in range(num_hidden_layers):
-    #     model.add(tf.keras.layers.Dense(num_neurons_per_layer,
-    #                                     activation=tf.keras.activations.tanh,
-    #                                     kernel_initializer=&#39;glorot_normal&#39;))
-
-    # model.add(tf.keras.layers.Dense(num_outputs))
 
     return model
 
@@ -671,13 +714,54 @@ to zero). Momentum decay (beta1) is also applied to the entire momentum
 accumulator. This means that the sparse behavior is equivalent to the dense
 behavior (in contrast to some momentum implementations which ignore momentum
 unless a variable slice was actually used).</p>
-<p>Create a new Optimizer.</p></div>
+<p>Optimizer for the neural network used in a solver object.
+Acts as a wrapper for the Adam optimizer with an exponential learning rate decay.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>initial_learning_rate</code></strong> :&ensp;<code>float</code></dt>
+<dd>Initial learning rate of the optimizer.
+Defaults to 1e-3.</dd>
+<dt><strong><code>decay_steps</code></strong> :&ensp;<code>int</code></dt>
+<dd>Number of iterations after which the learning rate has decayed by the specified factor.
+Defaults to 1000.</dd>
+<dt><strong><code>decay_rate</code></strong> :&ensp;<code>float</code></dt>
+<dd>Factor by which the learning rate is decayed.
+Defaults to 0.9.</dd>
+</dl>
+<h2 id="examples">Examples</h2>
+<pre><code class="language-python-repl">&gt;&gt;&gt; from PDESolver import *
+&gt;&gt;&gt; optimizer = Optimizer(initial_learning_rate=1, decay_steps=500, decay_rate=0.5)
+&gt;&gt;&gt; solver = Solver(Laplace(), optimizer)
+</code></pre></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class Optimizer(tf.keras.optimizers.Adam):
     def __init__(self, initial_learning_rate=1e-3, decay_steps=1000, decay_rate=0.9):
+        &#34;&#34;&#34;
+        Optimizer for the neural network used in a solver object.
+        Acts as a wrapper for the Adam optimizer with an exponential learning rate decay.
+
+        Parameters
+        -----------
+        initial_learning_rate: float
+            Initial learning rate of the optimizer.
+            Defaults to 1e-3.
+        decay_steps: int
+            Number of iterations after which the learning rate has decayed by the specified factor.
+            Defaults to 1000.
+        decay_rate: float
+            Factor by which the learning rate is decayed.
+            Defaults to 0.9.
+
+        Examples
+        -----------
+        &gt;&gt;&gt; from PDESolver import *
+        &gt;&gt;&gt; optimizer = Optimizer(initial_learning_rate=1, decay_steps=500, decay_rate=0.5)
+        &gt;&gt;&gt; solver = Solver(Laplace(), optimizer)
+        &#34;&#34;&#34;
+
         self.lr_scheduler = tf.keras.optimizers.schedules.ExponentialDecay(initial_learning_rate, decay_steps, decay_rate) 
         super().__init__(learning_rate=self.lr_scheduler)
 
@@ -731,7 +815,7 @@ Defaults to 4</dd>
 Defaults to 50</dd>
 </dl>
 <h2 id="examples">Examples</h2>
-<pre><code class="language-python-repl">&gt;&gt;&gt; from PDESolver.BoundaryValueProblem import *
+<pre><code class="language-python-repl">&gt;&gt;&gt; from PDESolver import *
 &gt;&gt;&gt; optimizer = Optimizer(initial_learning_rate=1e-3, decay_steps=1000, decay_rate=0.9)
 &gt;&gt;&gt; bvp = Laplace()
 &gt;&gt;&gt; solver = Solver(bvp, optimizer, num_hidden_layers=4, num_neurons_per_layer=50)
@@ -760,7 +844,7 @@ Defaults to 50</dd>
 
         Examples
         -----------
-        &gt;&gt;&gt; from PDESolver.BoundaryValueProblem import *
+        &gt;&gt;&gt; from PDESolver import *
         &gt;&gt;&gt; optimizer = Optimizer(initial_learning_rate=1e-3, decay_steps=1000, decay_rate=0.9)
         &gt;&gt;&gt; bvp = Laplace()
         &gt;&gt;&gt; solver = Solver(bvp, optimizer, num_hidden_layers=4, num_neurons_per_layer=50)
@@ -919,12 +1003,13 @@ Defaults to 50</dd>
         residuals = self.compute_residuals()
 
         losses = {name: 0.0 for name in residuals.keys()}
-        losses[&#39;L2&#39;] = 0.0
+        l2loss = 0.0
         for i, (name, residual) in enumerate(residuals.items()):
             losses[name] += self.weights[i] * criterion(residual, 0.0)
-            losses[&#39;L2&#39;] += criterion(residual, 0.0)
+            l2loss += criterion(residual, 0.0)
 
         losses[&#39;total&#39;] = sum(losses.values())
+        losses[&#39;L2&#39;] = l2loss
 
         return losses
  
@@ -1010,6 +1095,20 @@ Defaults to 50</dd>
         tensor: L2 loss
         dict: Dictionary of gradients of form {condition_name: gradient}
         dict: Dictionary of adjusted condition weights of form {condition_name: weight}
+
+        Examples
+        -----------
+        &gt;&gt;&gt; from PDESolver import *
+        &gt;&gt;&gt; solver = Solver(Laplace(), Optimizer())
+        &gt;&gt;&gt; l2loss, gradients, new_weights = solver.train_step()
+        &gt;&gt;&gt; l2loss
+        &lt;tf.Tensor: shape=(), dtype=float32, numpy=4.371607&gt;
+        &gt;&gt;&gt; l2loss, gradients, new_weights = solver.train_step()
+        &gt;&gt;&gt; l2loss
+        &lt;tf.Tensor: shape=(), dtype=float32, numpy=3.0963678&gt;
+        &gt;&gt;&gt; l2loss, gradients, new_weights = solver.train_step()
+        &gt;&gt;&gt; l2loss
+        &lt;tf.Tensor: shape=(), dtype=float32, numpy=3.029224&gt;
         &#34;&#34;&#34;
         
         l2loss, gradients = self.compute_gradients()
@@ -1035,6 +1134,13 @@ Defaults to 50</dd>
         debug_frequency: int (default=2500)
             Frequency (every X iterations) at which to show debug panel.
             If negative, no debug panel is shown
+
+        Examples
+        -----------
+        &gt;&gt;&gt; from PDESolver import *
+        &gt;&gt;&gt; solver = Solver(Laplace(), Optimizer())
+        &gt;&gt;&gt; solver.train(iterations=10000, debug_frequency=2500)
+        øL²-loss = 6.044e+01 (best: 2.305e+01, 000064it ago) lr = 0.00090:   3%|█                                | 1271/40000 [00:33&lt;07:53, 81.76it/s]
         &#34;&#34;&#34;
 
         best_loss = np.inf
@@ -1070,6 +1176,14 @@ Defaults to 50</dd>
         -----------
         gradients: tuple
             Tuple of gradients of the PDE and data losses obtained from compute_gradients
+
+        Examples
+        -----------
+        &gt;&gt;&gt; from PDESolver import *                        
+        &gt;&gt;&gt; solver = Solver(Laplace(), Optimizer())
+        &gt;&gt;&gt; l2loss, gradients = solver.compute_gradients()
+        &gt;&gt;&gt; solver.loss_history += [l2loss.numpy()]
+        &gt;&gt;&gt; solver.show_debugplot(gradients)    
         &#34;&#34;&#34;
 
         fig = plt.figure(figsize=(16, 8), layout=&#39;compressed&#39;)
@@ -1096,7 +1210,7 @@ Defaults to 50</dd>
             axs[ax_count].set_ylim(0, 100)
             axs[ax_count].set_yscale(&#39;symlog&#39;)
             axs[ax_count].set_title(self.model.layers[j].name)
-        
+
         axs[-1].legend()
 
         n = len(self.loss_history)
@@ -1431,12 +1545,13 @@ array([[-0.01344297],
     residuals = self.compute_residuals()
 
     losses = {name: 0.0 for name in residuals.keys()}
-    losses[&#39;L2&#39;] = 0.0
+    l2loss = 0.0
     for i, (name, residual) in enumerate(residuals.items()):
         losses[name] += self.weights[i] * criterion(residual, 0.0)
-        losses[&#39;L2&#39;] += criterion(residual, 0.0)
+        l2loss += criterion(residual, 0.0)
 
     losses[&#39;total&#39;] = sum(losses.values())
+    losses[&#39;L2&#39;] = l2loss
 
     return losses</code></pre>
 </details>
@@ -1517,7 +1632,14 @@ array([[ 0.53346014],
 <dl>
 <dt><strong><code>gradients</code></strong> :&ensp;<code>tuple</code></dt>
 <dd>Tuple of gradients of the PDE and data losses obtained from compute_gradients</dd>
-</dl></div>
+</dl>
+<h2 id="examples">Examples</h2>
+<pre><code class="language-python-repl">&gt;&gt;&gt; from PDESolver import *                        
+&gt;&gt;&gt; solver = Solver(Laplace(), Optimizer())
+&gt;&gt;&gt; l2loss, gradients = solver.compute_gradients()
+&gt;&gt;&gt; solver.loss_history += [l2loss.numpy()]
+&gt;&gt;&gt; solver.show_debugplot(gradients)
+</code></pre></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -1530,6 +1652,14 @@ array([[ 0.53346014],
     -----------
     gradients: tuple
         Tuple of gradients of the PDE and data losses obtained from compute_gradients
+
+    Examples
+    -----------
+    &gt;&gt;&gt; from PDESolver import *                        
+    &gt;&gt;&gt; solver = Solver(Laplace(), Optimizer())
+    &gt;&gt;&gt; l2loss, gradients = solver.compute_gradients()
+    &gt;&gt;&gt; solver.loss_history += [l2loss.numpy()]
+    &gt;&gt;&gt; solver.show_debugplot(gradients)    
     &#34;&#34;&#34;
 
     fig = plt.figure(figsize=(16, 8), layout=&#39;compressed&#39;)
@@ -1556,7 +1686,7 @@ array([[ 0.53346014],
         axs[ax_count].set_ylim(0, 100)
         axs[ax_count].set_yscale(&#39;symlog&#39;)
         axs[ax_count].set_title(self.model.layers[j].name)
-    
+
     axs[-1].legend()
 
     n = len(self.loss_history)
@@ -1610,7 +1740,13 @@ array([[ 0.53346014],
 <dt><strong><code>debug_frequency</code></strong> :&ensp;<code>int (default=2500)</code></dt>
 <dd>Frequency (every X iterations) at which to show debug panel.
 If negative, no debug panel is shown</dd>
-</dl></div>
+</dl>
+<h2 id="examples">Examples</h2>
+<pre><code class="language-python-repl">&gt;&gt;&gt; from PDESolver import *
+&gt;&gt;&gt; solver = Solver(Laplace(), Optimizer())
+&gt;&gt;&gt; solver.train(iterations=10000, debug_frequency=2500)
+øL²-loss = 6.044e+01 (best: 2.305e+01, 000064it ago) lr = 0.00090:   3%|█                                | 1271/40000 [00:33&lt;07:53, 81.76it/s]
+</code></pre></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -1626,6 +1762,13 @@ If negative, no debug panel is shown</dd>
     debug_frequency: int (default=2500)
         Frequency (every X iterations) at which to show debug panel.
         If negative, no debug panel is shown
+
+    Examples
+    -----------
+    &gt;&gt;&gt; from PDESolver import *
+    &gt;&gt;&gt; solver = Solver(Laplace(), Optimizer())
+    &gt;&gt;&gt; solver.train(iterations=10000, debug_frequency=2500)
+    øL²-loss = 6.044e+01 (best: 2.305e+01, 000064it ago) lr = 0.00090:   3%|█                                | 1271/40000 [00:33&lt;07:53, 81.76it/s]
     &#34;&#34;&#34;
 
     best_loss = np.inf
@@ -1667,7 +1810,20 @@ If negative, no debug panel is shown</dd>
 <dd>&nbsp;</dd>
 <dt><strong><code>dict</code></strong> :&ensp;<code>Dictionary</code> of <code>adjusted condition weights</code> of <code>form {condition_name: weight}</code></dt>
 <dd>&nbsp;</dd>
-</dl></div>
+</dl>
+<h2 id="examples">Examples</h2>
+<pre><code class="language-python-repl">&gt;&gt;&gt; from PDESolver import *
+&gt;&gt;&gt; solver = Solver(Laplace(), Optimizer())
+&gt;&gt;&gt; l2loss, gradients, new_weights = solver.train_step()
+&gt;&gt;&gt; l2loss
+&lt;tf.Tensor: shape=(), dtype=float32, numpy=4.371607&gt;
+&gt;&gt;&gt; l2loss, gradients, new_weights = solver.train_step()
+&gt;&gt;&gt; l2loss
+&lt;tf.Tensor: shape=(), dtype=float32, numpy=3.0963678&gt;
+&gt;&gt;&gt; l2loss, gradients, new_weights = solver.train_step()
+&gt;&gt;&gt; l2loss
+&lt;tf.Tensor: shape=(), dtype=float32, numpy=3.029224&gt;
+</code></pre></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -1682,6 +1838,20 @@ def train_step(self):
     tensor: L2 loss
     dict: Dictionary of gradients of form {condition_name: gradient}
     dict: Dictionary of adjusted condition weights of form {condition_name: weight}
+
+    Examples
+    -----------
+    &gt;&gt;&gt; from PDESolver import *
+    &gt;&gt;&gt; solver = Solver(Laplace(), Optimizer())
+    &gt;&gt;&gt; l2loss, gradients, new_weights = solver.train_step()
+    &gt;&gt;&gt; l2loss
+    &lt;tf.Tensor: shape=(), dtype=float32, numpy=4.371607&gt;
+    &gt;&gt;&gt; l2loss, gradients, new_weights = solver.train_step()
+    &gt;&gt;&gt; l2loss
+    &lt;tf.Tensor: shape=(), dtype=float32, numpy=3.0963678&gt;
+    &gt;&gt;&gt; l2loss, gradients, new_weights = solver.train_step()
+    &gt;&gt;&gt; l2loss
+    &lt;tf.Tensor: shape=(), dtype=float32, numpy=3.029224&gt;
     &#34;&#34;&#34;
     
     l2loss, gradients = self.compute_gradients()
