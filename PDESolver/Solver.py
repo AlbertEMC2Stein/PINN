@@ -35,7 +35,7 @@ class Solver:
 
         Examples
         -----------
-        >>> from PDESolver.BoundaryValueProblem import *
+        >>> from PDESolver import *
         >>> optimizer = Optimizer(initial_learning_rate=1e-3, decay_steps=1000, decay_rate=0.9)
         >>> bvp = Laplace()
         >>> solver = Solver(bvp, optimizer, num_hidden_layers=4, num_neurons_per_layer=50)
@@ -286,6 +286,20 @@ class Solver:
         tensor: L2 loss
         dict: Dictionary of gradients of form {condition_name: gradient}
         dict: Dictionary of adjusted condition weights of form {condition_name: weight}
+
+        Examples
+        -----------
+        >>> from PDESolver import *
+        >>> solver = Solver(Laplace(), Optimizer())
+        >>> l2loss, gradients, new_weights = solver.train_step()
+        >>> l2loss
+        <tf.Tensor: shape=(), dtype=float32, numpy=4.371607>
+        >>> l2loss, gradients, new_weights = solver.train_step()
+        >>> l2loss
+        <tf.Tensor: shape=(), dtype=float32, numpy=3.0963678>
+        >>> l2loss, gradients, new_weights = solver.train_step()
+        >>> l2loss
+        <tf.Tensor: shape=(), dtype=float32, numpy=3.029224>
         """
         
         l2loss, gradients = self.compute_gradients()
@@ -311,6 +325,13 @@ class Solver:
         debug_frequency: int (default=2500)
             Frequency (every X iterations) at which to show debug panel.
             If negative, no debug panel is shown
+
+        Examples
+        -----------
+        >>> from PDESolver import *
+        >>> solver = Solver(Laplace(), Optimizer())
+        >>> solver.train(iterations=10000, debug_frequency=2500)
+        øL²-loss = 6.044e+01 (best: 2.305e+01, 000064it ago) lr = 0.00090:   3%|█                                | 1271/40000 [00:33<07:53, 81.76it/s]
         """
 
         best_loss = np.inf
@@ -346,6 +367,14 @@ class Solver:
         -----------
         gradients: tuple
             Tuple of gradients of the PDE and data losses obtained from compute_gradients
+
+        Examples
+        -----------
+        >>> from PDESolver import *                        
+        >>> solver = Solver(Laplace(), Optimizer())
+        >>> l2loss, gradients = solver.compute_gradients()
+        >>> solver.loss_history += [l2loss.numpy()]
+        >>> solver.show_debugplot(gradients)    
         """
 
         fig = plt.figure(figsize=(16, 8), layout='compressed')
@@ -372,7 +401,7 @@ class Solver:
             axs[ax_count].set_ylim(0, 100)
             axs[ax_count].set_yscale('symlog')
             axs[ax_count].set_title(self.model.layers[j].name)
-        
+
         axs[-1].legend()
 
         n = len(self.loss_history)
@@ -416,6 +445,29 @@ class Solver:
 
 class Optimizer(tf.keras.optimizers.Adam):
     def __init__(self, initial_learning_rate=1e-3, decay_steps=1000, decay_rate=0.9):
+        """
+        Optimizer for the neural network used in a solver object.
+        Acts as a wrapper for the Adam optimizer with an exponential learning rate decay.
+
+        Parameters
+        -----------
+        initial_learning_rate: float
+            Initial learning rate of the optimizer.
+            Defaults to 1e-3.
+        decay_steps: int
+            Number of iterations after which the learning rate has decayed by the specified factor.
+            Defaults to 1000.
+        decay_rate: float
+            Factor by which the learning rate is decayed.
+            Defaults to 0.9.
+
+        Examples
+        -----------
+        >>> from PDESolver import *
+        >>> optimizer = Optimizer(initial_learning_rate=1, decay_steps=500, decay_rate=0.5)
+        >>> solver = Solver(Laplace(), optimizer)
+        """
+
         self.lr_scheduler = tf.keras.optimizers.schedules.ExponentialDecay(initial_learning_rate, decay_steps, decay_rate) 
         super().__init__(learning_rate=self.lr_scheduler)
 
@@ -505,16 +557,6 @@ def init_model(num_inputs, num_outputs, num_hidden_layers, num_neurons_per_layer
 
     outputs = layers[-1](outputs)
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
-
-    # model = tf.keras.Sequential()
-    # model.add(tf.keras.Input(num_inputs))
-
-    # for _ in range(num_hidden_layers):
-    #     model.add(tf.keras.layers.Dense(num_neurons_per_layer,
-    #                                     activation=tf.keras.activations.tanh,
-    #                                     kernel_initializer='glorot_normal'))
-
-    # model.add(tf.keras.layers.Dense(num_outputs))
 
     return model
 
