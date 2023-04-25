@@ -18,7 +18,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 class Solver:
     def __init__(self, bvp, optimizer, num_hidden_layers=4, num_neurons_per_layer=50):
         """
-        Constructor for the Solver class.
+        Constructor for a boundary value problem solver.
 
         Parameters
         -----------
@@ -32,6 +32,13 @@ class Solver:
         num_neurons_per_layer:  int
             Number of neurons in each hidden layer
             Defaults to 50
+
+        Examples
+        -----------
+        >>> from PDESolver.BoundaryValueProblem import *
+        >>> optimizer = Optimizer(initial_learning_rate=1e-3, decay_steps=1000, decay_rate=0.9)
+        >>> bvp = Laplace()
+        >>> solver = Solver(bvp, optimizer, num_hidden_layers=4, num_neurons_per_layer=50)
         """
 
         num_inputs = len(bvp.get_specification()['variables'])
@@ -45,8 +52,8 @@ class Solver:
 
         self.loss_history = []
         self.weight_history = [{cond.name: 1. for cond in bvp.get_conditions()}]
-        self.weights = None
-        self.step = None
+        self.weights = tf.Variable(np.ones(len(bvp.get_conditions())), dtype=tf.float32)
+        self.step = tf.Variable(0)
 
     def compute_differentials(self, samplePoints):
         """
@@ -54,8 +61,6 @@ class Solver:
 
         Parameters
         -----------
-        model: neural network
-            Model to calculate the differentials of
         samplePoints: tensor
             Tensor of points to calculate the differentials at
 
@@ -63,6 +68,35 @@ class Solver:
         -----------
         gradient_dict: dict
             Dictionary containing the differentials of the model needed for the bvp at the given points
+
+        Examples
+        -----------
+        >>> from PDESolver import *
+        >>> solver = Solver(Laplace(), Optimizer())
+        >>> samples = tf.constant([[0, 0], [0, 0.5], [0, 1]])  
+        >>> solver.compute_differentials(samples) 
+        {'x': <tf.Tensor: shape=(3, 1), dtype=float32, numpy=
+        array([[0.],
+            [0.],
+            [0.]], dtype=float32)>, 'y': <tf.Tensor: shape=(3, 1), dtype=float32, numpy=
+        array([[0. ],
+            [0.5],
+            [1. ]], dtype=float32)>, 'u': <tf.Tensor: shape=(3, 1), dtype=float32, numpy=
+        array([[-1.4298753 ],
+            [-1.0829226 ],
+            [-0.86016774]], dtype=float32)>, 'u_x': <tf.Tensor: shape=(3, 1), dtype=float32, numpy=
+        array([[0.7101533 ],
+            [0.7047943 ],
+            [0.45764494]], dtype=float32)>, 'u_xx': <tf.Tensor: shape=(3, 1), dtype=float32, numpy=
+        array([[-1.6525286],
+            [-1.6283079],
+            [-1.2708694]], dtype=float32)>, 'u_y': <tf.Tensor: shape=(3, 1), dtype=float32, numpy=
+        array([[0.71874154],
+            [0.6189531 ],
+            [0.2856549 ]], dtype=float32)>, 'u_yy': <tf.Tensor: shape=(3, 1), dtype=float32, numpy=
+        array([[-0.01344297],
+            [-0.5869958 ],
+            [-0.47277603]], dtype=float32)>}
         """
 
         specs = self.bvp.get_specification()
@@ -111,6 +145,23 @@ class Solver:
         Returns
         -----------
         dict: Dictionary of residuals of form {condition_name: residual}
+
+        Examples
+        -----------
+        >>> from PDESolver import *
+        >>> solver = Solver(Laplace(minibatch_size=3), Optimizer()) 
+        >>> solver.compute_residuals()
+        {'zero_boundary': <tf.Tensor: shape=(3, 1), dtype=float32, numpy=
+        array([[1.7787822],
+            [2.6922252],
+            [1.3558891]], dtype=float32)>, 'f_boundary': <tf.Tensor: shape=(3, 1), dtype=float32, numpy=
+        array([[2.4186134],
+            [2.4582624],
+            [2.4142814]], dtype=float32)>, 'inner': <tf.Tensor: shape=(4, 1), dtype=float32, numpy=
+        array([[ 0.53346014],
+            [-4.9377484 ],
+            [ 0.21452093],
+            [-1.6314204 ]], dtype=float32)>}
         """
 
         conditions = self.bvp.get_conditions()
@@ -129,7 +180,14 @@ class Solver:
         
         Returns
         -----------
-        tuple: Tuple of losses for the PDE and data
+        dict: Dictionary of losses of form {condition_name: loss}
+
+        Examples
+        -----------
+        >>> from PDESolver import *
+        >>> solver = Solver(Laplace(), Optimizer()) 
+        >>> solver.compute_losses() 
+        {'zero_boundary': <tf.Tensor: shape=(), dtype=float32, numpy=0.29857153>, 'f_boundary': <tf.Tensor: shape=(), dtype=float32, numpy=0.07588613>, 'inner': <tf.Tensor: shape=(), dtype=float32, numpy=6.3834033>, 'L2': <tf.Tensor: shape=(), dtype=float32, numpy=6.757861>, 'total': <tf.Tensor: shape=(), dtype=float32, numpy=13.515722>}
         """
 
         criterion = tf.keras.losses.MeanSquaredError()
@@ -151,7 +209,15 @@ class Solver:
 
         Returns
         -----------
-        tuple: Tuple of gradients
+        tensor: L2 loss
+        dict: Dictionary of gradients of form {condition_name: gradient}
+
+        Examples
+        -----------
+        >>> from PDESolver import *
+        >>> solver = Solver(Laplace(), Optimizer())
+        >>> solver.compute_gradients()
+        (<tf.Tensor: shape=(), dtype=float32, numpy=4.756295>, LARGE DICTIONARY)
         """
         
         with tf.GradientTape(persistent=True) as tape:
@@ -170,8 +236,20 @@ class Solver:
 
         Parameters
         -----------
-        gradients: tuple
-            Tuple of gradients of the PDE and data losses obtained from compute_gradients
+        gradients: dict
+            Dictionary of gradients as returned by compute_gradients()
+
+        Returns
+        -----------
+        dict: Dictionary of adjusted condition weights of form {condition_name: weight}
+
+        Examples
+        -----------
+        >>> from PDESolver import *
+        >>> solver = Solver(Laplace(), Optimizer()) 
+        >>> l2, gradients = solver.compute_gradients()
+        >>> solver.adjust_weights(gradients)
+        {'zero_boundary': <tf.Tensor: shape=(), dtype=float32, numpy=38.457893>, 'f_boundary': <tf.Tensor: shape=(), dtype=float32, numpy=22.964037>, 'inner': <tf.Tensor: shape=(), dtype=float32, numpy=1.0>}
         """
 
         gradient_vectors = [tf.concat([tf.reshape(gradient, [-1]) for gradient in gradients_list], axis=0) for gradients_list in gradients.values()][:-1] # excluding 'totalgrad'
@@ -202,15 +280,12 @@ class Solver:
         """
         Performs a single training step.
 
-        Parameters
+        Returns
         -----------
-        optimizer: optimizer
-            Optimizer to use for training
+        tensor: L2 loss
+        dict: Dictionary of gradients of form {condition_name: gradient}
+        dict: Dictionary of adjusted condition weights of form {condition_name: weight}
         """
-
-        if self.step is None:
-            self.step = tf.Variable(0)
-            self.weights = tf.Variable(np.ones(len(self.bvp.get_conditions())), dtype=tf.float32)
         
         l2loss, gradients = self.compute_gradients()
         
