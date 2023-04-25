@@ -5,7 +5,7 @@ import numpy as np
 class Region:
     def __init__(self):
         """
-        Constructor for a Region class.
+        Constructor for a region/domain.
         """
 
         pass
@@ -25,7 +25,8 @@ class Region:
         -----------
         array: Array of shape (n, dimension)
         """
-        ...
+        
+        raise NotImplementedError
 
     def get_bounds(self):
         """
@@ -35,7 +36,8 @@ class Region:
         -----------
         array: Array of shape (2, dimension)
         """
-        ...
+        
+        raise NotImplementedError
 
     def __and__(self, other):
         """
@@ -62,7 +64,7 @@ class Region:
 class Cuboid(Region):
     def __init__(self, corner1, corner2):
         """
-        Constructor for a cuboid region which sides are parallel to all axis
+        Constructor for a cuboid region which sides are parallel to all axis.
 
         Parameters
         -----------
@@ -70,6 +72,13 @@ class Cuboid(Region):
             Coordinates of the first corner
         corner2: list
             Coordinates of the second corner
+
+        Examples
+        -----------
+        >>> Cuboid([0, 0], [1, 1]) # Unit square
+        >>> Cuboid([0, 0, 0], [1, 1, 1]) # Unit cube
+        >>> Cuboid([0, 0], [1, 0]) # Intersection of unit square with x-axis
+        >>> Cuboid([0, 0], [0, 1]) # Intersection of unit square with y-axis
         """
 
         super().__init__()
@@ -121,6 +130,11 @@ class Union(Region):
         -----------
         regions: Region
             List of regions
+
+        Examples
+        -----------
+        >>> Union(Cuboid([0, 0], [1, 0]), Cuboid([0, 0], [0, 1])) # Intersection of unit square with x- and y-axis
+        >>> Cuboid([0, 0], [1, 0]) & Cuboid([0, 0], [0, 1]) # Shorthand notation of example above
         """
 
         super().__init__()
@@ -148,8 +162,10 @@ class Union(Region):
 class Sampler:
     def __init__(self):
         """
-        Constructor for a Sampler class.
+        Constructor for a sampler.
         """
+
+        pass
 
     def pick(self, n):
         """
@@ -164,63 +180,63 @@ class Sampler:
         -----------
         array: Array of shape (n,)
         """
-        ...
+        
+        raise NotImplementedError
 
 
 class Random(Sampler):
     def __init__(self):
         """
-        Constructor for a Random Sampler class.
+        Constructor for a sampler sampling from a uniform distibution on [0; 1]. 
+
+        Examples
+        -----------
+        >>> sampler = Random()
+        >>> sampler.pick(5) 
+        <tf.Tensor: shape=(5,), dtype=float32, numpy=
+        array([0.41073012, 0.6588371 , 0.03179121, 0.96656334, 0.14362192],
+            dtype=float32)>
         """
 
         super().__init__()
 
     def pick(self, n):
-        """
-        Samples n uniformly distributed points from [0; 1].
-
-        Parameters
-        -----------
-        n: int
-            Number of points to sample
-
-        Returns
-        -----------
-        array: Array of shape (n,)
-        """
-
-        return tf.random.uniform(shape=(1, n))
+        return tf.random.uniform(shape=(n,))
 
 
 class Equidistant(Sampler):
     def __init__(self):
         """
-        Constructor for a Equidistant Sampler class.
+        Constructor for a sampler sampling equidistantly from [0; 1].
+
+        Examples
+        -----------
+        >>> sampler = Equidistant() 
+        >>> sampler.pick(5)
+        <tf.Tensor: shape=(5,), dtype=float32, numpy=array([0.  , 0.25, 0.5 , 0.75, 1.  ], dtype=float32)>
         """
 
         super().__init__()
 
     def pick(self, n):
-        """
-        Samples n equidistant points from [0; 1].
-
-        Parameters
-        -----------
-        n: int
-            Number of points to sample
-
-        Returns
-        -----------
-        array: Array of shape (n,)
-        """
-
         return tf.linspace(0., 1., n)
 
 
 class EquidistantRandom(Sampler):
     def __init__(self, n):
         """
-        Constructor for a EquidistantRandom Sampler class.
+        Constructor for a sampler sampling a random subset of a equidistant grid in [0; 1].
+
+        Parameters
+        -----------
+        n: int
+            Number of points in the equidistant grid
+
+        Examples
+        ------------
+        >>> sampler = EquidistantRandom(5)
+        >>> sampler.pick(3)
+        <tf.Tensor: shape=(1, 3), dtype=float32, numpy=array([[0.5 , 0.75, 0.  ]], dtype=float32)>
         """
 
         super().__init__()
@@ -228,18 +244,5 @@ class EquidistantRandom(Sampler):
         self.original = tf.linspace(0., 1., n)
 
     def pick(self, n):
-        """
-        Samples n equidistant points from [0; 1] with a random offset.
-
-        Parameters
-        -----------
-        n: int
-            Number of points to sample
-
-        Returns
-        -----------
-        array: Array of shape (n,)
-        """
-
         idx = tf.random.uniform(shape=(int(n),), minval=0, maxval=self.n - 1, dtype=tf.int64)
-        return tf.gather(self.original, idx)[tf.newaxis, :]
+        return tf.gather(self.original, idx)
