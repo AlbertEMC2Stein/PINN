@@ -95,8 +95,7 @@ class Solver:
 
         Returns
         -----------
-        gradient_dict: dict
-            Dictionary containing the differentials of the model needed for the bvp at the given points
+        dict: Dictionary containing the differentials of the model needed for the bvp at the given points
 
         Examples
         -----------
@@ -473,6 +472,7 @@ class Solver:
 
 
 class Optimizer(tf.keras.optimizers.Adam):
+    &#34;&#34;&#34;&#34;&#34;&#34;
     def __init__(self, initial_learning_rate=1e-3, decay_steps=1000, decay_rate=0.9):
         &#34;&#34;&#34;
         Optimizer for the neural network used in a solver object.
@@ -501,6 +501,27 @@ class Optimizer(tf.keras.optimizers.Adam):
         super().__init__(learning_rate=self.lr_scheduler)
 
     def lr_history_upto(self, iteration):
+        &#34;&#34;&#34;
+        Returns the learning rate history up to the specified iteration.
+
+        Parameters
+        -----------
+        iteration: int
+            Iteration up to which the learning rate history is returned.
+
+        Returns
+        -----------
+        numpy.ndarray: Learning rate history up to the specified iteration.
+
+        Examples
+        -----------
+        &gt;&gt;&gt; optimizer = Optimizer()
+        &gt;&gt;&gt; optimizer.lr_history_upto(10)
+        array([0.001     , 0.00099989, 0.00099979, 0.00099968, 0.00099958,
+               0.00099947, 0.00099937, 0.00099926, 0.00099916, 0.00099905,
+               0.00099895], dtype=float32)&gt;
+        &#34;&#34;&#34;
+
         iters = np.arange(0, iteration + 1)
         return self.lr_scheduler(iters)
         
@@ -616,105 +637,7 @@ if __name__ == &#39;__main__&#39;:
 <span>(</span><span>initial_learning_rate=0.001, decay_steps=1000, decay_rate=0.9)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Optimizer that implements the Adam algorithm.</p>
-<p>Adam optimization is a stochastic gradient descent method that is based on
-adaptive estimation of first-order and second-order moments.</p>
-<p>According to
-<a href="http://arxiv.org/abs/1412.6980">Kingma et al., 2014</a>,
-the method is "<em>computationally
-efficient, has little memory requirement, invariant to diagonal rescaling of
-gradients, and is well suited for problems that are large in terms of
-data/parameters</em>".</p>
-<h2 id="args">Args</h2>
-<dl>
-<dt><strong><code>learning_rate</code></strong></dt>
-<dd>A <code>tf.Tensor</code>, floating point value, a schedule that is a
-<code>tf.keras.optimizers.schedules.LearningRateSchedule</code>, or a callable
-that takes no arguments and returns the actual value to use. The
-learning rate. Defaults to 0.001.</dd>
-<dt><strong><code>beta_1</code></strong></dt>
-<dd>A float value or a constant float tensor, or a callable
-that takes no arguments and returns the actual value to use. The
-exponential decay rate for the 1st moment estimates. Defaults to 0.9.</dd>
-<dt><strong><code>beta_2</code></strong></dt>
-<dd>A float value or a constant float tensor, or a callable
-that takes no arguments and returns the actual value to use. The
-exponential decay rate for the 2nd moment estimates. Defaults to 0.999.</dd>
-<dt><strong><code>epsilon</code></strong></dt>
-<dd>A small constant for numerical stability. This epsilon is
-"epsilon hat" in the Kingma and Ba paper (in the formula just before
-Section 2.1), not the epsilon in Algorithm 1 of the paper. Defaults to
-1e-7.</dd>
-<dt><strong><code>amsgrad</code></strong></dt>
-<dd>Boolean. Whether to apply AMSGrad variant of this algorithm from
-the paper "On the Convergence of Adam and beyond". Defaults to <code>False</code>.</dd>
-<dt><strong><code>name</code></strong></dt>
-<dd>String. The name to use
-for momentum accumulator weights created by
-the optimizer.</dd>
-<dt><strong><code>weight_decay</code></strong></dt>
-<dd>Float, defaults to None. If set, weight decay is applied.</dd>
-<dt><strong><code>clipnorm</code></strong></dt>
-<dd>Float. If set, the gradient of each weight is individually
-clipped so that its norm is no higher than this value.</dd>
-<dt><strong><code>clipvalue</code></strong></dt>
-<dd>Float. If set, the gradient of each weight is clipped to be no
-higher than this value.</dd>
-<dt><strong><code>global_clipnorm</code></strong></dt>
-<dd>Float. If set, the gradient of all weights is clipped so
-that their global norm is no higher than this value.</dd>
-<dt><strong><code>use_ema</code></strong></dt>
-<dd>Boolean, defaults to False. If True, exponential moving average
-(EMA) is applied. EMA consists of computing an exponential moving
-average of the weights of the model (as the weight values change after
-each training batch), and periodically overwriting the weights with
-their moving average.</dd>
-<dt><strong><code>ema_momentum</code></strong></dt>
-<dd>Float, defaults to 0.99. Only used if <code>use_ema=True</code>. This is
-# noqa: E501
-the momentum to use when computing the EMA of the model's weights:
-<code>new_average = ema_momentum * old_average + (1 - ema_momentum) *
-current_variable_value</code>.</dd>
-<dt><strong><code>ema_overwrite_frequency</code></strong></dt>
-<dd>Int or None, defaults to None. Only used if
-<code>use_ema=True</code>. Every <code>ema_overwrite_frequency</code> steps of iterations, we
-overwrite the model variable by its moving average. If None, the optimizer
-# noqa: E501
-does not overwrite model variables in the middle of training, and you
-need to explicitly overwrite the variables at the end of training
-by calling <code>optimizer.finalize_variable_values()</code> (which updates the model
-# noqa: E501
-variables in-place). When using the built-in <code>fit()</code> training loop, this
-happens automatically after the last epoch, and you don't need to do
-anything.</dd>
-<dt><strong><code>jit_compile</code></strong></dt>
-<dd>Boolean, defaults to True. If True, the optimizer will use XLA
-# noqa: E501
-compilation. If no GPU device is found, this flag will be ignored.</dd>
-<dt><strong><code>**kwargs</code></strong></dt>
-<dd>keyword arguments only used for backward compatibility.</dd>
-</dl>
-<h2 id="reference">Reference</h2>
-<ul>
-<li><a href="http://arxiv.org/abs/1412.6980">Kingma et al., 2014</a></li>
-<li><a href="https://openreview.net/pdf?id=ryQu7f-RZ">Reddi et al., 2018</a> for <code>amsgrad</code>.</li>
-</ul>
-<p>Notes:</p>
-<p>The default value of 1e-7 for epsilon might not be a good default in
-general. For example, when training an Inception network on ImageNet a
-current good choice is 1.0 or 0.1. Note that since Adam uses the
-formulation just before Section 2.1 of the Kingma and Ba paper rather than
-the formulation in Algorithm 1, the "epsilon" referred to here is "epsilon
-hat" in the paper.</p>
-<p>The sparse implementation of this algorithm (used when the gradient is an
-IndexedSlices object, typically because of <code>tf.gather</code> or an embedding
-lookup in the forward pass) does apply momentum to variable slices even if
-they were not used in the forward pass (meaning they have a gradient equal
-to zero). Momentum decay (beta1) is also applied to the entire momentum
-accumulator. This means that the sparse behavior is equivalent to the dense
-behavior (in contrast to some momentum implementations which ignore momentum
-unless a variable slice was actually used).</p>
-<p>Optimizer for the neural network used in a solver object.
+<div class="desc"><p>Optimizer for the neural network used in a solver object.
 Acts as a wrapper for the Adam optimizer with an exponential learning rate decay.</p>
 <h2 id="parameters">Parameters</h2>
 <dl>
@@ -738,6 +661,7 @@ Defaults to 0.9.</dd>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class Optimizer(tf.keras.optimizers.Adam):
+    &#34;&#34;&#34;&#34;&#34;&#34;
     def __init__(self, initial_learning_rate=1e-3, decay_steps=1000, decay_rate=0.9):
         &#34;&#34;&#34;
         Optimizer for the neural network used in a solver object.
@@ -766,6 +690,27 @@ Defaults to 0.9.</dd>
         super().__init__(learning_rate=self.lr_scheduler)
 
     def lr_history_upto(self, iteration):
+        &#34;&#34;&#34;
+        Returns the learning rate history up to the specified iteration.
+
+        Parameters
+        -----------
+        iteration: int
+            Iteration up to which the learning rate history is returned.
+
+        Returns
+        -----------
+        numpy.ndarray: Learning rate history up to the specified iteration.
+
+        Examples
+        -----------
+        &gt;&gt;&gt; optimizer = Optimizer()
+        &gt;&gt;&gt; optimizer.lr_history_upto(10)
+        array([0.001     , 0.00099989, 0.00099979, 0.00099968, 0.00099958,
+               0.00099947, 0.00099937, 0.00099926, 0.00099916, 0.00099905,
+               0.00099895], dtype=float32)&gt;
+        &#34;&#34;&#34;
+
         iters = np.arange(0, iteration + 1)
         return self.lr_scheduler(iters)</code></pre>
 </details>
@@ -783,12 +728,47 @@ Defaults to 0.9.</dd>
 <span>def <span class="ident">lr_history_upto</span></span>(<span>self, iteration)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Returns the learning rate history up to the specified iteration.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>iteration</code></strong> :&ensp;<code>int</code></dt>
+<dd>Iteration up to which the learning rate history is returned.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<p>numpy.ndarray: Learning rate history up to the specified iteration.</p>
+<h2 id="examples">Examples</h2>
+<pre><code class="language-python-repl">&gt;&gt;&gt; optimizer = Optimizer()
+&gt;&gt;&gt; optimizer.lr_history_upto(10)
+array([0.001     , 0.00099989, 0.00099979, 0.00099968, 0.00099958,
+       0.00099947, 0.00099937, 0.00099926, 0.00099916, 0.00099905,
+       0.00099895], dtype=float32)&gt;
+</code></pre></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def lr_history_upto(self, iteration):
+    &#34;&#34;&#34;
+    Returns the learning rate history up to the specified iteration.
+
+    Parameters
+    -----------
+    iteration: int
+        Iteration up to which the learning rate history is returned.
+
+    Returns
+    -----------
+    numpy.ndarray: Learning rate history up to the specified iteration.
+
+    Examples
+    -----------
+    &gt;&gt;&gt; optimizer = Optimizer()
+    &gt;&gt;&gt; optimizer.lr_history_upto(10)
+    array([0.001     , 0.00099989, 0.00099979, 0.00099968, 0.00099958,
+           0.00099947, 0.00099937, 0.00099926, 0.00099916, 0.00099905,
+           0.00099895], dtype=float32)&gt;
+    &#34;&#34;&#34;
+
     iters = np.arange(0, iteration + 1)
     return self.lr_scheduler(iters)</code></pre>
 </details>
@@ -875,8 +855,7 @@ Defaults to 50</dd>
 
         Returns
         -----------
-        gradient_dict: dict
-            Dictionary containing the differentials of the model needed for the bvp at the given points
+        dict: Dictionary containing the differentials of the model needed for the bvp at the given points
 
         Examples
         -----------
@@ -1337,8 +1316,8 @@ Defaults to 50</dd>
 </dl>
 <h2 id="returns">Returns</h2>
 <dl>
-<dt><strong><code>gradient_dict</code></strong> :&ensp;<code>dict</code></dt>
-<dd>Dictionary containing the differentials of the model needed for the bvp at the given points</dd>
+<dt><strong><code>dict</code></strong> :&ensp;<code>Dictionary containing the differentials</code> of <code>the model needed for the bvp at the given points</code></dt>
+<dd>&nbsp;</dd>
 </dl>
 <h2 id="examples">Examples</h2>
 <pre><code class="language-python-repl">&gt;&gt;&gt; from PDESolver import *
@@ -1383,8 +1362,7 @@ array([[-0.01344297],
 
     Returns
     -----------
-    gradient_dict: dict
-        Dictionary containing the differentials of the model needed for the bvp at the given points
+    dict: Dictionary containing the differentials of the model needed for the bvp at the given points
 
     Examples
     -----------

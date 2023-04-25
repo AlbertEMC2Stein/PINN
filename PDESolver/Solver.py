@@ -66,8 +66,7 @@ class Solver:
 
         Returns
         -----------
-        gradient_dict: dict
-            Dictionary containing the differentials of the model needed for the bvp at the given points
+        dict: Dictionary containing the differentials of the model needed for the bvp at the given points
 
         Examples
         -----------
@@ -444,6 +443,7 @@ class Solver:
 
 
 class Optimizer(tf.keras.optimizers.Adam):
+    """"""
     def __init__(self, initial_learning_rate=1e-3, decay_steps=1000, decay_rate=0.9):
         """
         Optimizer for the neural network used in a solver object.
@@ -472,6 +472,27 @@ class Optimizer(tf.keras.optimizers.Adam):
         super().__init__(learning_rate=self.lr_scheduler)
 
     def lr_history_upto(self, iteration):
+        """
+        Returns the learning rate history up to the specified iteration.
+
+        Parameters
+        -----------
+        iteration: int
+            Iteration up to which the learning rate history is returned.
+
+        Returns
+        -----------
+        numpy.ndarray: Learning rate history up to the specified iteration.
+
+        Examples
+        -----------
+        >>> optimizer = Optimizer()
+        >>> optimizer.lr_history_upto(10)
+        array([0.001     , 0.00099989, 0.00099979, 0.00099968, 0.00099958,
+               0.00099947, 0.00099937, 0.00099926, 0.00099916, 0.00099905,
+               0.00099895], dtype=float32)>
+        """
+
         iters = np.arange(0, iteration + 1)
         return self.lr_scheduler(iters)
         
