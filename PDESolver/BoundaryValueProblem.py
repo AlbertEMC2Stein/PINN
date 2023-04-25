@@ -65,13 +65,15 @@ class Condition:
         sampler: Sampler
             Sampler to use for sampling from the region
 
-        Example
+        Examples
         -----------
+        >>> from PDESolver.Sampling import *
         >>> Condition("Laplace", # Name of the condition
         ...           lambda Du: Du["u_xx"] + Du["u_yy"], # Residue function
         ...           (Cuboid([0, 0], [1, 1]), 128), # Unit square together with number of samples
         ...           sampler=Random()) # Random sampler
 
+        >>> from PDESolver.Sampling import *
         >>> Condition("HeatEquation", # Name of the condition
         ...           lambda Du: Du["u_t"] - Du["u_xx"], # Residue function
         ...           (Cuboid([0, 0], [1, 1]), 128), # Unit square together with number of samples
