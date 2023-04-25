@@ -194,12 +194,13 @@ class Solver:
         residuals = self.compute_residuals()
 
         losses = {name: 0.0 for name in residuals.keys()}
-        losses['L2'] = 0.0
+        l2loss = 0.0
         for i, (name, residual) in enumerate(residuals.items()):
             losses[name] += self.weights[i] * criterion(residual, 0.0)
-            losses['L2'] += criterion(residual, 0.0)
+            l2loss += criterion(residual, 0.0)
 
         losses['total'] = sum(losses.values())
+        losses['L2'] = l2loss
 
         return losses
  
