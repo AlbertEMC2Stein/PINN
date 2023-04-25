@@ -173,22 +173,6 @@ def plot_2D(solver):
         X, Y = np.meshgrid(xspace, yspace)
         XYgrid = np.vstack([X.flatten(), Y.flatten()]).T
         XYgrid = tf.cast(XYgrid, 'float32')
-
-        # plot = _plot_3d(X, Y, np.zeros_like(X), ax, ['t', 'x'], '', False)
-
-        # def data_gen(frame):
-        #     x, y = XYgrid[:, 0], XYgrid[:, 1]
-        #     z = solver.model(tf.transpose(tf.stack([tf.ones_like(x) * frame, x, y])))
-        #     Z = tf.reshape(z, X.shape)
-
-        #     ax.clear()
-        #     plot = ax.plot_surface(X, Y, Z, cmap='viridis')
-        #     ax.set_xlim(0, 1)
-        #     ax.set_ylim(0, 1)
-        #     ax.set_zlim(-0.1, 1)
-
-        #     title = ax.set_title("t = %.2f" % frame, ha='center')
-        #     return plot, title
         
         x, y = XYgrid[:, 0], XYgrid[:, 1]
         zarray = np.zeros((N, N, 120))
@@ -209,9 +193,6 @@ def plot_2D(solver):
         ax.set_ylim(0, 1)
         ax.set_zlim(-0.1, 1)
         anim = FuncAnimation(fig, update_plot, 120, fargs=(zarray, plot), interval=16)
-
-        #anim = FuncAnimation(fig, data_gen, fargs=(plot,), frames=np.linspace(0, 2, 120),
-        #                     interval=16, blit=False)
 
         anim.save("../out/%s_solution.gif" % solver.bvp.__class__.__name__, fps=30)
         plt.show()
@@ -275,7 +256,8 @@ def plot_2Dvectorfield(solver):
 
 def plot_phaseplot(solver, t_start=0, t_end=2, N=500):
     """
-    Plots the solution of a DAE defined in one temporal dimension and two spacial outputs.
+    (WIP) Plots the solution of a DAE defined in one temporal dimension and two spacial outputs.
+    Only works for the pendulum example.
 
     Parameters
     -----------
@@ -321,6 +303,19 @@ def plot_phaseplot(solver, t_start=0, t_end=2, N=500):
 
 
 def debug_plot_2D(solver, variables, domain):
+    """
+    Plots the solution of a BVP defined in two spacial dimensions and one output.
+
+    Parameters
+    -----------
+    solver: Solver
+        Trained solver to be visualized
+    variables: list
+        List of variables to be plotted
+    domain: list
+        Domain on which the solution is plotted
+    """
+
     N = 1000
     xspace = np.linspace(domain[0], domain[1], N + 1)
     yspace = np.linspace(domain[2], domain[3], N + 1)
@@ -343,6 +338,24 @@ def debug_plot_2D(solver, variables, domain):
 
 
 def error_plot_2D(solver, exact_solution, variables, domain, heatmap=True):
+    """
+    Plots the solution of a BVP defined in two spacial dimensions and one output 
+    together with its exact solution and the absolute error.
+
+    Parameters
+    -----------
+    solver: Solver
+        Trained solver to be visualized
+    exact_solution: function
+        Function representing the exact solution to the given problem
+    variables: list
+        List of variables to be plotted
+    domain: list
+        Domain on which the solution is plotted
+    heatmap: bool
+        If True, the solution is plotted as a heatmap, otherwise as a 3D surface plot
+    """
+
     N = 1000
     xspace = np.linspace(domain[0], domain[1], N + 1)
     yspace = np.linspace(domain[2], domain[3], N + 1)
