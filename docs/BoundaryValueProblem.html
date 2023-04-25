@@ -94,13 +94,15 @@ class Condition:
         sampler: Sampler
             Sampler to use for sampling from the region
 
-        Example
+        Examples
         -----------
+        &gt;&gt;&gt; from PDESolver.Sampling import *
         &gt;&gt;&gt; Condition(&#34;Laplace&#34;, # Name of the condition
         ...           lambda Du: Du[&#34;u_xx&#34;] + Du[&#34;u_yy&#34;], # Residue function
         ...           (Cuboid([0, 0], [1, 1]), 128), # Unit square together with number of samples
         ...           sampler=Random()) # Random sampler
 
+        &gt;&gt;&gt; from PDESolver.Sampling import *
         &gt;&gt;&gt; Condition(&#34;HeatEquation&#34;, # Name of the condition
         ...           lambda Du: Du[&#34;u_t&#34;] - Du[&#34;u_xx&#34;], # Residue function
         ...           (Cuboid([0, 0], [1, 1]), 128), # Unit square together with number of samples
@@ -909,13 +911,15 @@ u(t, x) &amp;= 0 \quad &amp;&amp;\forall (t, x) \in [0, 1] \times \lbrace -1, 1 
 <dt><strong><code>sampler</code></strong> :&ensp;<code>Sampler</code></dt>
 <dd>Sampler to use for sampling from the region</dd>
 </dl>
-<h2 id="example">Example</h2>
-<pre><code class="language-python-repl">&gt;&gt;&gt; Condition(&quot;Laplace&quot;, # Name of the condition
+<h2 id="examples">Examples</h2>
+<pre><code class="language-python-repl">&gt;&gt;&gt; from PDESolver.Sampling import *
+&gt;&gt;&gt; Condition(&quot;Laplace&quot;, # Name of the condition
 ...           lambda Du: Du[&quot;u_xx&quot;] + Du[&quot;u_yy&quot;], # Residue function
 ...           (Cuboid([0, 0], [1, 1]), 128), # Unit square together with number of samples
 ...           sampler=Random()) # Random sampler
 </code></pre>
-<pre><code class="language-python-repl">&gt;&gt;&gt; Condition(&quot;HeatEquation&quot;, # Name of the condition
+<pre><code class="language-python-repl">&gt;&gt;&gt; from PDESolver.Sampling import *
+&gt;&gt;&gt; Condition(&quot;HeatEquation&quot;, # Name of the condition
 ...           lambda Du: Du[&quot;u_t&quot;] - Du[&quot;u_xx&quot;], # Residue function
 ...           (Cuboid([0, 0], [1, 1]), 128), # Unit square together with number of samples
 ...           sampler=Random()) # Random sampler
@@ -940,13 +944,15 @@ u(t, x) &amp;= 0 \quad &amp;&amp;\forall (t, x) \in [0, 1] \times \lbrace -1, 1 
         sampler: Sampler
             Sampler to use for sampling from the region
 
-        Example
+        Examples
         -----------
+        &gt;&gt;&gt; from PDESolver.Sampling import *
         &gt;&gt;&gt; Condition(&#34;Laplace&#34;, # Name of the condition
         ...           lambda Du: Du[&#34;u_xx&#34;] + Du[&#34;u_yy&#34;], # Residue function
         ...           (Cuboid([0, 0], [1, 1]), 128), # Unit square together with number of samples
         ...           sampler=Random()) # Random sampler
 
+        &gt;&gt;&gt; from PDESolver.Sampling import *
         &gt;&gt;&gt; Condition(&#34;HeatEquation&#34;, # Name of the condition
         ...           lambda Du: Du[&#34;u_t&#34;] - Du[&#34;u_xx&#34;], # Residue function
         ...           (Cuboid([0, 0], [1, 1]), 128), # Unit square together with number of samples

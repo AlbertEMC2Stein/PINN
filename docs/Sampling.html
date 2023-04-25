@@ -34,7 +34,7 @@ import numpy as np
 class Region:
     def __init__(self):
         &#34;&#34;&#34;
-        Constructor for a Region class.
+        Constructor for a region/domain.
         &#34;&#34;&#34;
 
         pass
@@ -54,7 +54,8 @@ class Region:
         -----------
         array: Array of shape (n, dimension)
         &#34;&#34;&#34;
-        ...
+        
+        raise NotImplementedError
 
     def get_bounds(self):
         &#34;&#34;&#34;
@@ -64,7 +65,8 @@ class Region:
         -----------
         array: Array of shape (2, dimension)
         &#34;&#34;&#34;
-        ...
+        
+        raise NotImplementedError
 
     def __and__(self, other):
         &#34;&#34;&#34;
@@ -91,7 +93,7 @@ class Region:
 class Cuboid(Region):
     def __init__(self, corner1, corner2):
         &#34;&#34;&#34;
-        Constructor for a cuboid region which sides are parallel to all axis
+        Constructor for a cuboid region which sides are parallel to all axis.
 
         Parameters
         -----------
@@ -99,6 +101,13 @@ class Cuboid(Region):
             Coordinates of the first corner
         corner2: list
             Coordinates of the second corner
+
+        Examples
+        -----------
+        &gt;&gt;&gt; Cuboid([0, 0], [1, 1]) # Unit square
+        &gt;&gt;&gt; Cuboid([0, 0, 0], [1, 1, 1]) # Unit cube
+        &gt;&gt;&gt; Cuboid([0, 0], [1, 0]) # Intersection of unit square with x-axis
+        &gt;&gt;&gt; Cuboid([0, 0], [0, 1]) # Intersection of unit square with y-axis
         &#34;&#34;&#34;
 
         super().__init__()
@@ -150,6 +159,11 @@ class Union(Region):
         -----------
         regions: Region
             List of regions
+
+        Examples
+        -----------
+        &gt;&gt;&gt; Union(Cuboid([0, 0], [1, 0]), Cuboid([0, 0], [0, 1])) # Intersection of unit square with x- and y-axis
+        &gt;&gt;&gt; Cuboid([0, 0], [1, 0]) &amp; Cuboid([0, 0], [0, 1]) # Shorthand notation of example above
         &#34;&#34;&#34;
 
         super().__init__()
@@ -177,8 +191,10 @@ class Union(Region):
 class Sampler:
     def __init__(self):
         &#34;&#34;&#34;
-        Constructor for a Sampler class.
+        Constructor for a sampler.
         &#34;&#34;&#34;
+
+        pass
 
     def pick(self, n):
         &#34;&#34;&#34;
@@ -193,63 +209,63 @@ class Sampler:
         -----------
         array: Array of shape (n,)
         &#34;&#34;&#34;
-        ...
+        
+        raise NotImplementedError
 
 
 class Random(Sampler):
     def __init__(self):
         &#34;&#34;&#34;
-        Constructor for a Random Sampler class.
+        Constructor for a sampler sampling from a uniform distibution on [0; 1]. 
+
+        Examples
+        -----------
+        &gt;&gt;&gt; sampler = Random()
+        &gt;&gt;&gt; sampler.pick(5) 
+        &lt;tf.Tensor: shape=(5,), dtype=float32, numpy=
+        array([0.41073012, 0.6588371 , 0.03179121, 0.96656334, 0.14362192],
+            dtype=float32)&gt;
         &#34;&#34;&#34;
 
         super().__init__()
 
     def pick(self, n):
-        &#34;&#34;&#34;
-        Samples n uniformly distributed points from [0; 1].
-
-        Parameters
-        -----------
-        n: int
-            Number of points to sample
-
-        Returns
-        -----------
-        array: Array of shape (n,)
-        &#34;&#34;&#34;
-
-        return tf.random.uniform(shape=(1, n))
+        return tf.random.uniform(shape=(n,))
 
 
 class Equidistant(Sampler):
     def __init__(self):
         &#34;&#34;&#34;
-        Constructor for a Equidistant Sampler class.
+        Constructor for a sampler sampling equidistantly from [0; 1].
+
+        Examples
+        -----------
+        &gt;&gt;&gt; sampler = Equidistant() 
+        &gt;&gt;&gt; sampler.pick(5)
+        &lt;tf.Tensor: shape=(5,), dtype=float32, numpy=array([0.  , 0.25, 0.5 , 0.75, 1.  ], dtype=float32)&gt;
         &#34;&#34;&#34;
 
         super().__init__()
 
     def pick(self, n):
-        &#34;&#34;&#34;
-        Samples n equidistant points from [0; 1].
-
-        Parameters
-        -----------
-        n: int
-            Number of points to sample
-
-        Returns
-        -----------
-        array: Array of shape (n,)
-        &#34;&#34;&#34;
-
         return tf.linspace(0., 1., n)
 
 
 class EquidistantRandom(Sampler):
     def __init__(self, n):
         &#34;&#34;&#34;
-        Constructor for a EquidistantRandom Sampler class.
+        Constructor for a sampler sampling a random subset of a equidistant grid in [0; 1].
+
+        Parameters
+        -----------
+        n: int
+            Number of points in the equidistant grid
+
+        Examples
+        ------------
+        &gt;&gt;&gt; sampler = EquidistantRandom(5)
+        &gt;&gt;&gt; sampler.pick(3)
+        &lt;tf.Tensor: shape=(1, 3), dtype=float32, numpy=array([[0.5 , 0.75, 0.  ]], dtype=float32)&gt;
         &#34;&#34;&#34;
 
         super().__init__()
@@ -257,21 +273,8 @@ class EquidistantRandom(Sampler):
         self.original = tf.linspace(0., 1., n)
 
     def pick(self, n):
-        &#34;&#34;&#34;
-        Samples n equidistant points from [0; 1] with a random offset.
-
-        Parameters
-        -----------
-        n: int
-            Number of points to sample
-
-        Returns
-        -----------
-        array: Array of shape (n,)
-        &#34;&#34;&#34;
-
         idx = tf.random.uniform(shape=(int(n),), minval=0, maxval=self.n - 1, dtype=tf.int64)
-        return tf.gather(self.original, idx)[tf.newaxis, :]</code></pre>
+        return tf.gather(self.original, idx)</code></pre>
 </details>
 </section>
 <section>
@@ -288,14 +291,20 @@ class EquidistantRandom(Sampler):
 <span>(</span><span>corner1, corner2)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Constructor for a cuboid region which sides are parallel to all axis</p>
+<div class="desc"><p>Constructor for a cuboid region which sides are parallel to all axis.</p>
 <h2 id="parameters">Parameters</h2>
 <dl>
 <dt><strong><code>corner1</code></strong> :&ensp;<code>list</code></dt>
 <dd>Coordinates of the first corner</dd>
 <dt><strong><code>corner2</code></strong> :&ensp;<code>list</code></dt>
 <dd>Coordinates of the second corner</dd>
-</dl></div>
+</dl>
+<h2 id="examples">Examples</h2>
+<pre><code class="language-python-repl">&gt;&gt;&gt; Cuboid([0, 0], [1, 1]) # Unit square
+&gt;&gt;&gt; Cuboid([0, 0, 0], [1, 1, 1]) # Unit cube
+&gt;&gt;&gt; Cuboid([0, 0], [1, 0]) # Intersection of unit square with x-axis
+&gt;&gt;&gt; Cuboid([0, 0], [0, 1]) # Intersection of unit square with y-axis
+</code></pre></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -303,7 +312,7 @@ class EquidistantRandom(Sampler):
 <pre><code class="python">class Cuboid(Region):
     def __init__(self, corner1, corner2):
         &#34;&#34;&#34;
-        Constructor for a cuboid region which sides are parallel to all axis
+        Constructor for a cuboid region which sides are parallel to all axis.
 
         Parameters
         -----------
@@ -311,6 +320,13 @@ class EquidistantRandom(Sampler):
             Coordinates of the first corner
         corner2: list
             Coordinates of the second corner
+
+        Examples
+        -----------
+        &gt;&gt;&gt; Cuboid([0, 0], [1, 1]) # Unit square
+        &gt;&gt;&gt; Cuboid([0, 0, 0], [1, 1, 1]) # Unit cube
+        &gt;&gt;&gt; Cuboid([0, 0], [1, 0]) # Intersection of unit square with x-axis
+        &gt;&gt;&gt; Cuboid([0, 0], [0, 1]) # Intersection of unit square with y-axis
         &#34;&#34;&#34;
 
         super().__init__()
@@ -370,7 +386,12 @@ class EquidistantRandom(Sampler):
 <span>class <span class="ident">Equidistant</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Constructor for a Equidistant Sampler class.</p></div>
+<div class="desc"><p>Constructor for a sampler sampling equidistantly from [0; 1].</p>
+<h2 id="examples">Examples</h2>
+<pre><code class="language-python-repl">&gt;&gt;&gt; sampler = Equidistant() 
+&gt;&gt;&gt; sampler.pick(5)
+&lt;tf.Tensor: shape=(5,), dtype=float32, numpy=array([0.  , 0.25, 0.5 , 0.75, 1.  ], dtype=float32)&gt;
+</code></pre></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -378,77 +399,49 @@ class EquidistantRandom(Sampler):
 <pre><code class="python">class Equidistant(Sampler):
     def __init__(self):
         &#34;&#34;&#34;
-        Constructor for a Equidistant Sampler class.
+        Constructor for a sampler sampling equidistantly from [0; 1].
+
+        Examples
+        -----------
+        &gt;&gt;&gt; sampler = Equidistant() 
+        &gt;&gt;&gt; sampler.pick(5)
+        &lt;tf.Tensor: shape=(5,), dtype=float32, numpy=array([0.  , 0.25, 0.5 , 0.75, 1.  ], dtype=float32)&gt;
         &#34;&#34;&#34;
 
         super().__init__()
 
     def pick(self, n):
-        &#34;&#34;&#34;
-        Samples n equidistant points from [0; 1].
-
-        Parameters
-        -----------
-        n: int
-            Number of points to sample
-
-        Returns
-        -----------
-        array: Array of shape (n,)
-        &#34;&#34;&#34;
-
         return tf.linspace(0., 1., n)</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
 <li><a title="PDESolver.Sampling.Sampler" href="#PDESolver.Sampling.Sampler">Sampler</a></li>
 </ul>
-<h3>Methods</h3>
-<dl>
-<dt id="PDESolver.Sampling.Equidistant.pick"><code class="name flex">
-<span>def <span class="ident">pick</span></span>(<span>self, n)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Samples n equidistant points from [0; 1].</p>
-<h2 id="parameters">Parameters</h2>
-<dl>
-<dt><strong><code>n</code></strong> :&ensp;<code>int</code></dt>
-<dd>Number of points to sample</dd>
-</dl>
-<h2 id="returns">Returns</h2>
-<dl>
-<dt><strong><code>array</code></strong> :&ensp;<code>Array</code> of <code>shape (n,)</code></dt>
-<dd>&nbsp;</dd>
-</dl></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def pick(self, n):
-    &#34;&#34;&#34;
-    Samples n equidistant points from [0; 1].
-
-    Parameters
-    -----------
-    n: int
-        Number of points to sample
-
-    Returns
-    -----------
-    array: Array of shape (n,)
-    &#34;&#34;&#34;
-
-    return tf.linspace(0., 1., n)</code></pre>
-</details>
-</dd>
-</dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="PDESolver.Sampling.Sampler" href="#PDESolver.Sampling.Sampler">Sampler</a></b></code>:
+<ul class="hlist">
+<li><code><a title="PDESolver.Sampling.Sampler.pick" href="#PDESolver.Sampling.Sampler.pick">pick</a></code></li>
+</ul>
+</li>
+</ul>
 </dd>
 <dt id="PDESolver.Sampling.EquidistantRandom"><code class="flex name class">
 <span>class <span class="ident">EquidistantRandom</span></span>
 <span>(</span><span>n)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Constructor for a EquidistantRandom Sampler class.</p></div>
+<div class="desc"><p>Constructor for a sampler sampling a random subset of a equidistant grid in [0; 1].</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>n</code></strong> :&ensp;<code>int</code></dt>
+<dd>Number of points in the equidistant grid</dd>
+</dl>
+<h2 id="examples">Examples</h2>
+<pre><code class="language-python-repl">&gt;&gt;&gt; sampler = EquidistantRandom(5)
+&gt;&gt;&gt; sampler.pick(3)
+&lt;tf.Tensor: shape=(1, 3), dtype=float32, numpy=array([[0.5 , 0.75, 0.  ]], dtype=float32)&gt;
+</code></pre></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -456,7 +449,18 @@ class EquidistantRandom(Sampler):
 <pre><code class="python">class EquidistantRandom(Sampler):
     def __init__(self, n):
         &#34;&#34;&#34;
-        Constructor for a EquidistantRandom Sampler class.
+        Constructor for a sampler sampling a random subset of a equidistant grid in [0; 1].
+
+        Parameters
+        -----------
+        n: int
+            Number of points in the equidistant grid
+
+        Examples
+        ------------
+        &gt;&gt;&gt; sampler = EquidistantRandom(5)
+        &gt;&gt;&gt; sampler.pick(3)
+        &lt;tf.Tensor: shape=(1, 3), dtype=float32, numpy=array([[0.5 , 0.75, 0.  ]], dtype=float32)&gt;
         &#34;&#34;&#34;
 
         super().__init__()
@@ -464,72 +468,34 @@ class EquidistantRandom(Sampler):
         self.original = tf.linspace(0., 1., n)
 
     def pick(self, n):
-        &#34;&#34;&#34;
-        Samples n equidistant points from [0; 1] with a random offset.
-
-        Parameters
-        -----------
-        n: int
-            Number of points to sample
-
-        Returns
-        -----------
-        array: Array of shape (n,)
-        &#34;&#34;&#34;
-
         idx = tf.random.uniform(shape=(int(n),), minval=0, maxval=self.n - 1, dtype=tf.int64)
-        return tf.gather(self.original, idx)[tf.newaxis, :]</code></pre>
+        return tf.gather(self.original, idx)</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
 <li><a title="PDESolver.Sampling.Sampler" href="#PDESolver.Sampling.Sampler">Sampler</a></li>
 </ul>
-<h3>Methods</h3>
-<dl>
-<dt id="PDESolver.Sampling.EquidistantRandom.pick"><code class="name flex">
-<span>def <span class="ident">pick</span></span>(<span>self, n)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Samples n equidistant points from [0; 1] with a random offset.</p>
-<h2 id="parameters">Parameters</h2>
-<dl>
-<dt><strong><code>n</code></strong> :&ensp;<code>int</code></dt>
-<dd>Number of points to sample</dd>
-</dl>
-<h2 id="returns">Returns</h2>
-<dl>
-<dt><strong><code>array</code></strong> :&ensp;<code>Array</code> of <code>shape (n,)</code></dt>
-<dd>&nbsp;</dd>
-</dl></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def pick(self, n):
-    &#34;&#34;&#34;
-    Samples n equidistant points from [0; 1] with a random offset.
-
-    Parameters
-    -----------
-    n: int
-        Number of points to sample
-
-    Returns
-    -----------
-    array: Array of shape (n,)
-    &#34;&#34;&#34;
-
-    idx = tf.random.uniform(shape=(int(n),), minval=0, maxval=self.n - 1, dtype=tf.int64)
-    return tf.gather(self.original, idx)[tf.newaxis, :]</code></pre>
-</details>
-</dd>
-</dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="PDESolver.Sampling.Sampler" href="#PDESolver.Sampling.Sampler">Sampler</a></b></code>:
+<ul class="hlist">
+<li><code><a title="PDESolver.Sampling.Sampler.pick" href="#PDESolver.Sampling.Sampler.pick">pick</a></code></li>
+</ul>
+</li>
+</ul>
 </dd>
 <dt id="PDESolver.Sampling.Random"><code class="flex name class">
 <span>class <span class="ident">Random</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Constructor for a Random Sampler class.</p></div>
+<div class="desc"><p>Constructor for a sampler sampling from a uniform distibution on [0; 1]. </p>
+<h2 id="examples">Examples</h2>
+<pre><code class="language-python-repl">&gt;&gt;&gt; sampler = Random()
+&gt;&gt;&gt; sampler.pick(5) 
+&lt;tf.Tensor: shape=(5,), dtype=float32, numpy=
+array([0.41073012, 0.6588371 , 0.03179121, 0.96656334, 0.14362192],
+    dtype=float32)&gt;
+</code></pre></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -537,76 +503,40 @@ class EquidistantRandom(Sampler):
 <pre><code class="python">class Random(Sampler):
     def __init__(self):
         &#34;&#34;&#34;
-        Constructor for a Random Sampler class.
+        Constructor for a sampler sampling from a uniform distibution on [0; 1]. 
+
+        Examples
+        -----------
+        &gt;&gt;&gt; sampler = Random()
+        &gt;&gt;&gt; sampler.pick(5) 
+        &lt;tf.Tensor: shape=(5,), dtype=float32, numpy=
+        array([0.41073012, 0.6588371 , 0.03179121, 0.96656334, 0.14362192],
+            dtype=float32)&gt;
         &#34;&#34;&#34;
 
         super().__init__()
 
     def pick(self, n):
-        &#34;&#34;&#34;
-        Samples n uniformly distributed points from [0; 1].
-
-        Parameters
-        -----------
-        n: int
-            Number of points to sample
-
-        Returns
-        -----------
-        array: Array of shape (n,)
-        &#34;&#34;&#34;
-
-        return tf.random.uniform(shape=(1, n))</code></pre>
+        return tf.random.uniform(shape=(n,))</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
 <li><a title="PDESolver.Sampling.Sampler" href="#PDESolver.Sampling.Sampler">Sampler</a></li>
 </ul>
-<h3>Methods</h3>
-<dl>
-<dt id="PDESolver.Sampling.Random.pick"><code class="name flex">
-<span>def <span class="ident">pick</span></span>(<span>self, n)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Samples n uniformly distributed points from [0; 1].</p>
-<h2 id="parameters">Parameters</h2>
-<dl>
-<dt><strong><code>n</code></strong> :&ensp;<code>int</code></dt>
-<dd>Number of points to sample</dd>
-</dl>
-<h2 id="returns">Returns</h2>
-<dl>
-<dt><strong><code>array</code></strong> :&ensp;<code>Array</code> of <code>shape (n,)</code></dt>
-<dd>&nbsp;</dd>
-</dl></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def pick(self, n):
-    &#34;&#34;&#34;
-    Samples n uniformly distributed points from [0; 1].
-
-    Parameters
-    -----------
-    n: int
-        Number of points to sample
-
-    Returns
-    -----------
-    array: Array of shape (n,)
-    &#34;&#34;&#34;
-
-    return tf.random.uniform(shape=(1, n))</code></pre>
-</details>
-</dd>
-</dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="PDESolver.Sampling.Sampler" href="#PDESolver.Sampling.Sampler">Sampler</a></b></code>:
+<ul class="hlist">
+<li><code><a title="PDESolver.Sampling.Sampler.pick" href="#PDESolver.Sampling.Sampler.pick">pick</a></code></li>
+</ul>
+</li>
+</ul>
 </dd>
 <dt id="PDESolver.Sampling.Region"><code class="flex name class">
 <span>class <span class="ident">Region</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Constructor for a Region class.</p></div>
+<div class="desc"><p>Constructor for a region/domain.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -614,7 +544,7 @@ class EquidistantRandom(Sampler):
 <pre><code class="python">class Region:
     def __init__(self):
         &#34;&#34;&#34;
-        Constructor for a Region class.
+        Constructor for a region/domain.
         &#34;&#34;&#34;
 
         pass
@@ -634,7 +564,8 @@ class EquidistantRandom(Sampler):
         -----------
         array: Array of shape (n, dimension)
         &#34;&#34;&#34;
-        ...
+        
+        raise NotImplementedError
 
     def get_bounds(self):
         &#34;&#34;&#34;
@@ -644,7 +575,8 @@ class EquidistantRandom(Sampler):
         -----------
         array: Array of shape (2, dimension)
         &#34;&#34;&#34;
-        ...
+        
+        raise NotImplementedError
 
     def __and__(self, other):
         &#34;&#34;&#34;
@@ -696,7 +628,8 @@ class EquidistantRandom(Sampler):
     -----------
     array: Array of shape (2, dimension)
     &#34;&#34;&#34;
-    ...</code></pre>
+    
+    raise NotImplementedError</code></pre>
 </details>
 </dd>
 <dt id="PDESolver.Sampling.Region.pick"><code class="name flex">
@@ -735,7 +668,8 @@ class EquidistantRandom(Sampler):
     -----------
     array: Array of shape (n, dimension)
     &#34;&#34;&#34;
-    ...</code></pre>
+    
+    raise NotImplementedError</code></pre>
 </details>
 </dd>
 </dl>
@@ -744,7 +678,7 @@ class EquidistantRandom(Sampler):
 <span>class <span class="ident">Sampler</span></span>
 </code></dt>
 <dd>
-<div class="desc"><p>Constructor for a Sampler class.</p></div>
+<div class="desc"><p>Constructor for a sampler.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -752,8 +686,10 @@ class EquidistantRandom(Sampler):
 <pre><code class="python">class Sampler:
     def __init__(self):
         &#34;&#34;&#34;
-        Constructor for a Sampler class.
+        Constructor for a sampler.
         &#34;&#34;&#34;
+
+        pass
 
     def pick(self, n):
         &#34;&#34;&#34;
@@ -768,7 +704,8 @@ class EquidistantRandom(Sampler):
         -----------
         array: Array of shape (n,)
         &#34;&#34;&#34;
-        ...</code></pre>
+        
+        raise NotImplementedError</code></pre>
 </details>
 <h3>Subclasses</h3>
 <ul class="hlist">
@@ -810,7 +747,8 @@ class EquidistantRandom(Sampler):
     -----------
     array: Array of shape (n,)
     &#34;&#34;&#34;
-    ...</code></pre>
+    
+    raise NotImplementedError</code></pre>
 </details>
 </dd>
 </dl>
@@ -825,7 +763,11 @@ class EquidistantRandom(Sampler):
 <dl>
 <dt><strong><code>regions</code></strong> :&ensp;<code><a title="PDESolver.Sampling.Region" href="#PDESolver.Sampling.Region">Region</a></code></dt>
 <dd>List of regions</dd>
-</dl></div>
+</dl>
+<h2 id="examples">Examples</h2>
+<pre><code class="language-python-repl">&gt;&gt;&gt; Union(Cuboid([0, 0], [1, 0]), Cuboid([0, 0], [0, 1])) # Intersection of unit square with x- and y-axis
+&gt;&gt;&gt; Cuboid([0, 0], [1, 0]) &amp; Cuboid([0, 0], [0, 1]) # Shorthand notation of example above
+</code></pre></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -839,6 +781,11 @@ class EquidistantRandom(Sampler):
         -----------
         regions: Region
             List of regions
+
+        Examples
+        -----------
+        &gt;&gt;&gt; Union(Cuboid([0, 0], [1, 0]), Cuboid([0, 0], [0, 1])) # Intersection of unit square with x- and y-axis
+        &gt;&gt;&gt; Cuboid([0, 0], [1, 0]) &amp; Cuboid([0, 0], [0, 1]) # Shorthand notation of example above
         &#34;&#34;&#34;
 
         super().__init__()
@@ -897,21 +844,12 @@ class EquidistantRandom(Sampler):
 </li>
 <li>
 <h4><code><a title="PDESolver.Sampling.Equidistant" href="#PDESolver.Sampling.Equidistant">Equidistant</a></code></h4>
-<ul class="">
-<li><code><a title="PDESolver.Sampling.Equidistant.pick" href="#PDESolver.Sampling.Equidistant.pick">pick</a></code></li>
-</ul>
 </li>
 <li>
 <h4><code><a title="PDESolver.Sampling.EquidistantRandom" href="#PDESolver.Sampling.EquidistantRandom">EquidistantRandom</a></code></h4>
-<ul class="">
-<li><code><a title="PDESolver.Sampling.EquidistantRandom.pick" href="#PDESolver.Sampling.EquidistantRandom.pick">pick</a></code></li>
-</ul>
 </li>
 <li>
 <h4><code><a title="PDESolver.Sampling.Random" href="#PDESolver.Sampling.Random">Random</a></code></h4>
-<ul class="">
-<li><code><a title="PDESolver.Sampling.Random.pick" href="#PDESolver.Sampling.Random.pick">pick</a></code></li>
-</ul>
 </li>
 <li>
 <h4><code><a title="PDESolver.Sampling.Region" href="#PDESolver.Sampling.Region">Region</a></code></h4>
