@@ -358,6 +358,45 @@ class Solver:
             if debug_frequency > 0 and (i % debug_frequency == 0 or i == iterations - 1):
                 self.show_debugplot(gradients)
 
+    def evaluate(self, values):
+        """
+        Evaluates the neural network at a given set of values.
+
+        Parameters
+        -----------
+        values: object
+            object with variable names as keys and lists of values to evaluate at as values 
+
+        Returns
+        -----------
+        tensor: Tensor of shape (len(values), 1) containing the evaluated values
+
+        Examples
+        -----------
+        >>> optim = Optimizer(initial_learning_rate=0.001, decay_steps=1000, decay_rate=0.98)
+        >>> solver = Solver(BlackScholes(), optim, num_hidden_layers=4, num_neurons_per_layer=50)
+        >>> solver.train(iterations=N, debug_frequency=N)
+        >>> solver.evaluate({'t': 0, 'S': 15})
+        >>> XXX
+        """
+
+        bvp_variables = self.bvp.get_specification()["variables"]
+
+        # convert all inputs to lists
+        for name in values.keys():
+            if type(values[name]) != list:
+                values[name] = [values[name]]
+
+        values_lengths = [len(values) for values in values.values()]
+
+        assert len(set(values_lengths)) == 1, "All values must have the same length"
+
+        assert set(values.keys()) == set(bvp_variables), "Provided variables must match with the ones specified in the BVP"
+
+        model_input = tf.transpose(tf.convert_to_tensor([[values[name] for name in bvp_variables]], dtype=tf.float32))
+
+        return self.model(model_input).numpy()
+
     def show_debugplot(self, gradients):
         """
         Shows a debug plot of the neural network.
