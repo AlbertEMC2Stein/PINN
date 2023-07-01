@@ -16,7 +16,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
 class Solver:
-    def __init__(self, bvp, optimizer, num_hidden_layers=4, num_neurons_per_layer=50):
+    def __init__(self, bvp, optimizer, num_hidden_layers=4, num_neurons_per_layer=50, activation=tf.tanh):
         """
         Constructor for a boundary value problem solver.
 
@@ -46,7 +46,7 @@ class Solver:
         inner_constraint = [condition for condition in bvp.get_conditions() if condition.name == 'inner'][0]
         mean, variance = inner_constraint.get_normalization_constants()
 
-        self.model = init_model(num_inputs, num_outputs, num_hidden_layers, num_neurons_per_layer, mean, variance)
+        self.model = init_model(num_inputs, num_outputs, num_hidden_layers, num_neurons_per_layer, mean, variance, activation)
         self.bvp = bvp
         self.optimizer = optimizer
 
@@ -595,10 +595,10 @@ class Linear(tf.keras.layers.Layer):
         return self.activation(tf.add(tf.matmul(inputs, self.W), self.b))
 
 
-def init_model(num_inputs, num_outputs, num_hidden_layers, num_neurons_per_layer, mean, variance):
+def init_model(num_inputs, num_outputs, num_hidden_layers, num_neurons_per_layer, mean, variance, activation=tf.tanh):
     layer_sizes = [num_inputs] + [num_neurons_per_layer] * num_hidden_layers + [num_outputs] 
-    layers = [Linear(layer_sizes[0], layer_sizes[1])] + \
-             [ImprovedLinear(layer_sizes[i], layer_sizes[i + 1]) for i in range(1, len(layer_sizes) - 2)] + \
+    layers = [Linear(layer_sizes[0], layer_sizes[1], activation=activation)] + \
+             [ImprovedLinear(layer_sizes[i], layer_sizes[i + 1], activation=activation) for i in range(1, len(layer_sizes) - 2)] + \
              [Linear(layer_sizes[-2], layer_sizes[-1], activation=tf.identity)]
 
     encoder_1 = Encoder(num_inputs, num_neurons_per_layer)
