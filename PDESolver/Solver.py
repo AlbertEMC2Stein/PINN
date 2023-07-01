@@ -16,7 +16,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
 class Solver:
-    def __init__(self, bvp, optimizer, num_hidden_layers=4, num_neurons_per_layer=50):
+    def __init__(self, bvp, optimizer, num_hidden_layers=4, num_neurons_per_layer=50, activation=tf.tanh):
         """
         Constructor for a boundary value problem solver.
 
@@ -46,7 +46,7 @@ class Solver:
         inner_constraint = [condition for condition in bvp.get_conditions() if condition.name == 'inner'][0]
         mean, variance = inner_constraint.get_normalization_constants()
 
-        self.model = init_model(num_inputs, num_outputs, num_hidden_layers, num_neurons_per_layer, mean, variance)
+        self.model = init_model(num_inputs, num_outputs, num_hidden_layers, num_neurons_per_layer, mean, variance, activation)
         self.bvp = bvp
         self.optimizer = optimizer
 
@@ -358,6 +358,45 @@ class Solver:
             if debug_frequency > 0 and (i % debug_frequency == 0 or i == iterations - 1):
                 self.show_debugplot(gradients)
 
+    def evaluate(self, values):
+        """
+        Evaluates the neural network at a given set of values.
+
+        Parameters
+        -----------
+        values: object
+            object with variable names as keys and lists of values to evaluate at as values 
+
+        Returns
+        -----------
+        tensor: Tensor of shape (len(values), 1) containing the evaluated values
+
+        Examples
+        -----------
+        >>> optim = Optimizer(initial_learning_rate=0.001, decay_steps=1000, decay_rate=0.98)
+        >>> solver = Solver(BlackScholes(), optim, num_hidden_layers=4, num_neurons_per_layer=50)
+        >>> solver.train(iterations=N, debug_frequency=N)
+        >>> solver.evaluate({'t': 0, 'S': 15})
+        >>> XXX
+        """
+
+        bvp_variables = self.bvp.get_specification()["variables"]
+
+        # convert all inputs to lists
+        for name in values.keys():
+            if type(values[name]) != list:
+                values[name] = [values[name]]
+
+        values_lengths = [len(values) for values in values.values()]
+
+        assert len(set(values_lengths)) == 1, "All values must have the same length"
+
+        assert set(values.keys()) == set(bvp_variables), "Provided variables must match with the ones specified in the BVP"
+
+        model_input = tf.transpose(tf.convert_to_tensor([[values[name] for name in bvp_variables]], dtype=tf.float32))
+
+        return self.model(model_input).numpy()
+
     def show_debugplot(self, gradients):
         """
         Shows a debug plot of the neural network.
@@ -556,10 +595,10 @@ class Linear(tf.keras.layers.Layer):
         return self.activation(tf.add(tf.matmul(inputs, self.W), self.b))
 
 
-def init_model(num_inputs, num_outputs, num_hidden_layers, num_neurons_per_layer, mean, variance):
+def init_model(num_inputs, num_outputs, num_hidden_layers, num_neurons_per_layer, mean, variance, activation=tf.tanh):
     layer_sizes = [num_inputs] + [num_neurons_per_layer] * num_hidden_layers + [num_outputs] 
-    layers = [Linear(layer_sizes[0], layer_sizes[1])] + \
-             [ImprovedLinear(layer_sizes[i], layer_sizes[i + 1]) for i in range(1, len(layer_sizes) - 2)] + \
+    layers = [Linear(layer_sizes[0], layer_sizes[1], activation=activation)] + \
+             [ImprovedLinear(layer_sizes[i], layer_sizes[i + 1], activation=activation) for i in range(1, len(layer_sizes) - 2)] + \
              [Linear(layer_sizes[-2], layer_sizes[-1], activation=tf.identity)]
 
     encoder_1 = Encoder(num_inputs, num_neurons_per_layer)
