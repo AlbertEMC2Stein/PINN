@@ -105,7 +105,7 @@ Once the virtual environment is created, activate it with
 
 ```
 source path/myvenv/bin/activate     (Mac/Linux)
-path/myvenv/Scripts/activat         (Windows)
+path/myvenv/Scripts/activate         (Windows)
 ```
 
 where `path` is the path to the venv. Now, you can install and test the `PDESolver` package inside this environment.
