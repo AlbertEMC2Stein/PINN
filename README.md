@@ -20,7 +20,7 @@
   <p align="center">
     A framework for solving differential equations with neural networks.
     <br />
-    <a href="https://github.com/albertemc2stein/PINN"><strong>Explore the docs »</strong></a>
+    <a href="https://albertemc2stein.github.io/PINN"><strong>Explore the docs »</strong></a>
     <br />
     <br />
     <a href="https://github.com/albertemc2stein/PINN">View Demo</a>
