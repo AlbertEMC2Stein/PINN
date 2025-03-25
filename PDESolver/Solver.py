@@ -164,12 +164,13 @@ class Solver:
         """
 
         conditions = self.bvp.get_conditions()
+        fun_name = self.bvp.get_specification()["components"][0]
 
         residuals = {}
         for condition in conditions:
             samples = condition.sample_points()
             Du = self.compute_differentials(samples)
-            residuals[condition.name] = condition.residue_fn(Du)
+            residuals[condition.name] = condition.residue_fn(Du) + 0*Du[fun_name] # Why this helps? IDK??!?!?! wtf
 
         return residuals
   
@@ -219,12 +220,12 @@ class Solver:
         >>> solver.compute_gradients()
         (<tf.Tensor: shape=(), dtype=float32, numpy=4.756295>, LARGE DICTIONARY)
         """
-        
+
         with tf.GradientTape(persistent=True) as tape:
-            tape.watch(self.model.trainable_variables)
             losses = self.compute_losses()
 
             kwargs = {'sources': self.model.trainable_variables, 'unconnected_gradients': tf.UnconnectedGradients.ZERO}
+
             grads = {name: tape.gradient(loss, **kwargs) for name, loss in losses.items() if name != 'L2'}
 
         return losses['L2'], grads
@@ -352,7 +353,7 @@ class Solver:
             if list(new_weights.values())[0] != -1:
                 self.weight_history += [{name: new_weights[name].numpy() for name in new_weights.keys()}]
             
-            avg_loss = np.mean(self.loss_history[-100:])
+            avg_loss = 10**np.mean(np.log10(self.loss_history[-100:]))
             pbar.desc = f'øL²-loss = {avg_loss:.3e} (best: {best_loss:.3e}, {iterations_since_last_improvement:0{k_max}d}it ago) lr = {self.optimizer.lr.numpy():.5f}'
 
             if debug_frequency > 0 and (i % debug_frequency == 0 or i == iterations - 1):
@@ -507,8 +508,21 @@ class Optimizer(tf.keras.optimizers.Adam):
         >>> solver = Solver(Laplace(), optimizer)
         """
 
-        self.lr_scheduler = tf.keras.optimizers.schedules.ExponentialDecay(initial_learning_rate, decay_steps, decay_rate) 
-        super().__init__(learning_rate=self.lr_scheduler)
+        lr_scheduler = tf.keras.optimizers.schedules.ExponentialDecay(initial_learning_rate, decay_steps, decay_rate)
+        super().__init__(learning_rate=lr_scheduler)
+        self.lr_scheduler = lr_scheduler
+
+    @property
+    def lr(self):
+        """
+        Returns the current learning rate of the optimizer.
+
+        Returns
+        -----------
+        float: Current learning rate of the optimizer.
+        """
+
+        return self.lr_scheduler(self.iterations)
 
     def lr_history_upto(self, iteration):
         """
@@ -541,12 +555,11 @@ class Optimizer(tf.keras.optimizers.Adam):
 ###################################################################################
 
                 
-def xavier_init(size):
+def xavier_init(self,name,size):
     in_dim = size[0]
     out_dim = size[1]
     xavier_stddev = 1. / np.sqrt((in_dim + out_dim) / 2.)
-    return tf.Variable(tf.random.normal([in_dim, out_dim], dtype=tf.float32) * xavier_stddev,
-                        dtype=tf.float32, trainable=True)
+    return self.add_weight(name=name, shape=size, initializer=tf.keras.initializers.RandomNormal(mean=0, stddev=xavier_stddev))
 
 
 class Encoder(tf.keras.layers.Layer):
@@ -557,9 +570,9 @@ class Encoder(tf.keras.layers.Layer):
         self.activation = activation
 
     def build(self, input_shape):  
-        self.W = xavier_init([self.inputs, self.outputs]) 
-        self.b = xavier_init([1, self.outputs])
-
+        self.W = xavier_init(self, "W", [self.inputs, self.outputs])
+        self.b = xavier_init(self, "b", [1, self.outputs])
+        
     def call(self, inputs):  
         return self.activation(tf.add(tf.matmul(inputs, self.W), self.b))
     
@@ -572,8 +585,8 @@ class ImprovedLinear(tf.keras.layers.Layer):
         self.activation = activation
 
     def build(self, input_shape):  
-        self.W = xavier_init([self.inputs, self.outputs]) 
-        self.b = xavier_init([1, self.outputs])
+        self.W = xavier_init(self, "W", [self.inputs, self.outputs])
+        self.b = xavier_init(self, "b", [1, self.outputs])
 
     def call(self, inputs, encoder_1, encoder_2):  
         return tf.math.multiply(self.activation(tf.add(tf.matmul(inputs, self.W), self.b)), encoder_1) + \
@@ -588,8 +601,8 @@ class Linear(tf.keras.layers.Layer):
         self.activation = activation
 
     def build(self, input_shape):  
-        self.W = xavier_init([self.inputs, self.outputs]) 
-        self.b = xavier_init([1, self.outputs])
+        self.W = xavier_init(self, "W", [self.inputs, self.outputs])
+        self.b = xavier_init(self, "b", [1, self.outputs])
 
     def call(self, inputs):  
         return self.activation(tf.add(tf.matmul(inputs, self.W), self.b))
@@ -604,7 +617,7 @@ def init_model(num_inputs, num_outputs, num_hidden_layers, num_neurons_per_layer
     encoder_1 = Encoder(num_inputs, num_neurons_per_layer)
     encoder_2 = Encoder(num_inputs, num_neurons_per_layer)
 
-    inputs = tf.keras.Input(num_inputs)
+    inputs = tf.keras.Input((num_inputs,))
     outputs = tf.keras.layers.Normalization(axis=-1, mean=mean, variance=variance)(inputs)
 
     E1 = encoder_1(outputs)
